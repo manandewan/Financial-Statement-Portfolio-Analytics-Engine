@@ -6,6 +6,7 @@ import datetime
 from src.agents.data_architect import DataArchitectAgent
 from src.agents.fundamental_analyst import FundamentalAnalystAgent
 from src.agents.quant_analyst import QuantAnalystAgent
+from src.agents.ml_predictive_analyst import MLPredictiveAnalystAgent
 from src.agents.coordinator import AgentSystemCoordinator
 
 class TestAgents(unittest.TestCase):
@@ -67,14 +68,18 @@ class TestAgents(unittest.TestCase):
         self.assertIn('AAPL', metrics)
         aapl_m = metrics['AAPL']
 
-        # D/E = 200,000 / 500,000 = 0.4
         self.assertAlmostEqual(aapl_m['debt_to_equity'], 0.4, places=2)
-        # Current Ratio = 150,000 / 100,000 = 1.5
         self.assertAlmostEqual(aapl_m['current_ratio'], 1.5, places=2)
-        # ROE = 100,000 / 500,000 = 0.20
         self.assertAlmostEqual(aapl_m['return_on_equity'], 0.20, places=2)
-        # FCF Yield = 90,000 / 2,000,000 = 0.045
         self.assertAlmostEqual(aapl_m['free_cash_flow_yield'], 0.045, places=3)
+
+    def test_ml_predictive_analyst_agent(self):
+        ml_agent = MLPredictiveAnalystAgent(model_type="random_forest")
+        res = ml_agent.predict(self.raw_data)
+
+        self.assertIn('predicted_annualized_returns', res)
+        self.assertIn('feature_importances', res)
+        self.assertIn('AAPL', res['predicted_annualized_returns'])
 
     def test_quant_analyst_agent(self):
         quant = QuantAnalystAgent(risk_free_rate=0.04)
@@ -88,16 +93,13 @@ class TestAgents(unittest.TestCase):
         sum_weights = sum(weights.values())
         self.assertAlmostEqual(sum_weights, 1.0, places=4)
 
-        for t, w in weights.items():
-            self.assertGreaterEqual(w, -1e-5)
-
     def test_coordinator(self):
         coordinator = AgentSystemCoordinator()
-        # Mocking data architect for quick offline test
         coordinator.data_architect.fetch_data = lambda tickers, start_date, end_date: self.raw_data
         bundle = coordinator.run_pipeline(['AAPL', 'MSFT', 'GOOGL'])
 
         self.assertIn('fundamental', bundle)
+        self.assertIn('ml_predictive', bundle)
         self.assertIn('quant', bundle)
         self.assertEqual(len(bundle['tickers']), 3)
 

@@ -34,15 +34,17 @@ st.markdown("""
     }
     .agent-pill {
         display: inline-block;
-        padding: 0.25rem 0.75rem;
+        padding: 0.25rem 0.65rem;
         border-radius: 15px;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         font-weight: 600;
-        margin-right: 0.5rem;
+        margin-right: 0.4rem;
+        margin-bottom: 0.4rem;
     }
     .pill-data { background-color: #2B6CB0; color: white; }
     .pill-fund { background-color: #2F855A; color: white; }
     .pill-quant { background-color: #6B46C1; color: white; }
+    .pill-ml { background-color: #D69E2E; color: black; }
     .pill-dev { background-color: #DD6B20; color: white; }
 </style>
 """, unsafe_allow_html=True)
@@ -95,19 +97,20 @@ def main():
     rf_rate = rf_rate_pct / 100.0
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🤖 Agent Architecture")
+    st.sidebar.markdown("### 🤖 Multi-Agent Architecture")
     st.sidebar.markdown("""
-    - **Data Architect**: Ingests 5y prices & statements.
-    - **Fundamental Analyst**: Computes D/E, Current Ratio, ROE, FCF Yield.
-    - **Quant Analyst**: MPT Optimization & Efficient Frontier.
-    - **Full-Stack Developer**: Renders Streamlit & Plotly UI.
+    - **Agent 1: Data Architect**: Ingests prices & statements.
+    - **Agent 2: Fundamental Analyst**: Computes D/E, ROE, FCF Yield.
+    - **Agent 3: Quantitative Analyst**: MPT Optimization & Efficient Frontier.
+    - **Agent 4: Predictive ML Analyst**: Random Forest return forecasts & feature inputs.
+    - **Agent 5: Dashboard Developer**: Streamlit & Plotly UI.
     """)
 
     st.sidebar.button("🚀 Run Agent Pipeline", type="primary", use_container_width=True)
 
     # App Header
     st.markdown('<div class="main-header">Financial Statement & Portfolio Optimization Dashboard</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Multi-Agent AI Coordination for Fundamental Valuation & Modern Portfolio Theory (MPT) Optimization</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Multi-Agent AI & Machine Learning Pipeline for Fundamental Valuation, Return Forecasting & Modern Portfolio Theory (MPT)</div>', unsafe_allow_html=True)
 
     # Pipeline Agent Badge Indicator
     st.markdown("""
@@ -115,7 +118,8 @@ def main():
         <span class="agent-pill pill-data">Agent 1: Financial Data Architect</span>
         <span class="agent-pill pill-fund">Agent 2: Fundamental Analyst</span>
         <span class="agent-pill pill-quant">Agent 3: Quantitative Analyst</span>
-        <span class="agent-pill pill-dev">Agent 4: Full-Stack Developer</span>
+        <span class="agent-pill pill-ml">Agent 4: Predictive ML Analyst</span>
+        <span class="agent-pill pill-dev">Agent 5: Full-Stack Developer</span>
     </div>
     <br>
     """, unsafe_allow_html=True)
@@ -125,7 +129,7 @@ def main():
         st.stop()
 
     # Execution Trigger
-    with st.spinner("🔄 Coordinating Agents: Fetching data, analyzing fundamentals, and optimizing portfolio..."):
+    with st.spinner("🔄 Coordinating Agents: Ingesting data, analyzing fundamentals, training ML models, and optimizing portfolio..."):
         try:
             data_bundle = run_agent_pipeline(
                 tickers_tuple=tuple(ticker_list),
@@ -142,12 +146,14 @@ def main():
     prices_df = data_bundle['prices']
     statements = data_bundle['statements']
     fundamental_res = data_bundle['fundamental']['metrics']
+    ml_res = data_bundle.get('ml_predictive', {})
     quant_res = data_bundle['quant']
 
     # Tabs Navigation
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "🏢 Fundamental Health (Agent 2)",
         "📊 Historical Performance",
+        "🤖 ML Return Forecasting (Agent 4)",
         "🎯 Portfolio Optimization (Agent 3)"
     ])
 
@@ -277,9 +283,78 @@ def main():
         st.plotly_chart(fig_corr, use_container_width=True)
 
     # ----------------------------------------------------
-    # TAB 3: PORTFOLIO OPTIMIZATION
+    # TAB 3: PREDICTIVE ML RETURN FORECASTING (AGENT 4)
     # ----------------------------------------------------
     with tab3:
+        st.subheader("Predictive Machine Learning Return Forecasting")
+        st.markdown(f"Engineered by **Agent 4 (Predictive ML Analyst)** using a **{ml_res.get('model_used', 'Random Forest Regressor')}** trained on technical features (14d RSI, 20d Volatility, 20d & 50d Momentum, Volume Trend).")
+
+        ml_dict = ml_res.get('ml_results', {})
+        latest_feats = ml_res.get('latest_features', {})
+
+        # Section A: Live Technical Features Display Table
+        st.markdown("### 📈 Live Technical Feature Inputs")
+        feat_rows = []
+        for t in tickers:
+            f = latest_feats.get(t, {})
+            feat_rows.append({
+                "Ticker": t,
+                "14-Day RSI": f"{f.get('rsi_14', 0):.2f}",
+                "20-Day Volatility (Ann.)": f"{f.get('volatility_20d', 0)*100:.2f}%",
+                "20-Day Momentum": f"{f.get('momentum_20d', 0)*100:+.2f}%",
+                "50-Day Momentum": f"{f.get('momentum_50d', 0)*100:+.2f}%",
+                "Volume Trend Ratio": f"{f.get('volume_trend', 0):.2f}",
+                "SMA (20d / 50d) Ratio": f"{f.get('sma_ratio', 0):.2f}"
+            })
+
+        st.dataframe(pd.DataFrame(feat_rows), use_container_width=True, hide_index=True)
+        st.markdown("---")
+
+        # Section B: Supervised ML Forecasts Table & Bar Chart
+        st.markdown("### 🔮 Supervised ML Forward Return Forecasts")
+        ml_summary_rows = []
+        for t in tickers:
+            t_ml = ml_dict.get(t, {})
+            ml_summary_rows.append({
+                "Ticker": t,
+                "Predicted 20-Day Return": f"{t_ml.get('predicted_20d_return', 0)*100:+.2f}%",
+                "Forecasted Annualized Return": f"{t_ml.get('predicted_annualized_return', 0)*100:+.2f}%",
+                "Test Holdout Directional Accuracy": f"{t_ml.get('directional_accuracy_pct', 0):.1f}%",
+                "Model MAE": f"{t_ml.get('mae', 0):.4f}"
+            })
+
+        st.dataframe(pd.DataFrame(ml_summary_rows), use_container_width=True, hide_index=True)
+
+        # Forecast Comparison Bar Chart & Feature Importance
+        col_ml1, col_ml2 = st.columns(2)
+        with col_ml1:
+            pred_20d = [ml_dict.get(t, {}).get('predicted_20d_return', 0)*100 for t in tickers]
+            fig_ml_bar = px.bar(
+                x=tickers, y=pred_20d,
+                labels={'x': 'Ticker', 'y': 'Predicted 20d Return (%)'},
+                title="ML 20-Day Forward Return Forecast (%)",
+                color=pred_20d,
+                color_continuous_scale="Viridis"
+            )
+            st.plotly_chart(fig_ml_bar, use_container_width=True)
+
+        with col_ml2:
+            st.markdown("### 🌲 Feature Importance Breakdown")
+            sel_ml_ticker = st.selectbox("Select Ticker for Feature Importance Analysis", tickers)
+            if sel_ml_ticker in ml_dict:
+                fi_dict = ml_dict[sel_ml_ticker].get('feature_importances', {})
+                fi_df = pd.DataFrame(list(fi_dict.items()), columns=['Feature', 'Importance']).sort_values(by='Importance', ascending=True)
+                fig_fi = px.bar(
+                    fi_df, x='Importance', y='Feature', orientation='h',
+                    title=f"Random Forest Feature Importance for {sel_ml_ticker}",
+                    color='Importance', color_continuous_scale="Blues"
+                )
+                st.plotly_chart(fig_fi, use_container_width=True)
+
+    # ----------------------------------------------------
+    # TAB 4: PORTFOLIO OPTIMIZATION
+    # ----------------------------------------------------
+    with tab4:
         st.subheader("Modern Portfolio Theory (MPT) Optimization")
         st.markdown("Calculated by **Agent 3 (Quantitative Analyst)** using `scipy.optimize` and Monte Carlo simulation.")
 

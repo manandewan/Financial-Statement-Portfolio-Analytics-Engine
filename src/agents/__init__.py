@@ -2,4 +2,5 @@
 from .data_architect import DataArchitectAgent
 from .fundamental_analyst import FundamentalAnalystAgent
 from .quant_analyst import QuantAnalystAgent
+from .ml_predictive_analyst import MLPredictiveAnalystAgent
 from .coordinator import AgentSystemCoordinator
