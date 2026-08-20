@@ -13,18 +13,19 @@ logger = logging.getLogger("AIPortfolioAnalyst")
 
 class AIPortfolioAnalystAgent:
     """
-    Agent 6: Gemini AI Executive Summarizer
+    Agent 5: Gemini AI Executive Summarizer
     Synthesizes outputs from Agent 1 (Data Architect), Agent 2 (Fundamental Analyst),
     Agent 3 (Quant Portfolio Optimizer), and Agent 4 (Predictive ML Analyst).
-    Uses Google Gemini API to generate an Wall Street Investment Memo & Portfolio Rationale.
+    Uses Google Gemini 3.7 Flash API to generate an Executive Wall Street Investment Memo.
     """
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model_name: str = "gemini-3.7-flash"):
         self.name = "Gemini AI Executive Summarizer"
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        self.model_name = model_name
 
     def generate_report(self, bundle: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Synthesize analytics bundle into a natural language executive report using Gemini AI.
+        Synthesize analytics bundle into a natural language executive report using Gemini 3.7.
         """
         tickers = bundle.get('tickers', [])
         fund_metrics = bundle.get('fundamental', {}).get('metrics', {})
@@ -37,7 +38,7 @@ class AIPortfolioAnalystAgent:
             return {
                 'status': 'offline',
                 'report': (
-                    "### 💡 Gemini AI Executive Report (Offline Mode)\n"
+                    "### 💡 Gemini 3.7 AI Executive Report (Offline Mode)\n"
                     "To generate a real-time Wall Street AI Investment Memo synthesizing "
                     "Fundamental Ratios, Machine Learning Return Forecasts, and MPT Portfolio Weights, "
                     "please enter your free **Gemini API Key** in the sidebar!"
@@ -46,15 +47,22 @@ class AIPortfolioAnalystAgent:
 
         try:
             genai.configure(api_key=self.api_key)
-            # Try available Gemini models
-            model_name = "gemini-2.5-flash"
-            try:
-                model = genai.GenerativeModel("gemini-2.5-flash")
-            except Exception:
+            
+            # Prioritize Gemini 3.7 Flash, with graceful fallbacks
+            model = None
+            models_to_try = [self.model_name, "gemini-3.7-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+            for m_name in models_to_try:
+                try:
+                    model = genai.GenerativeModel(m_name)
+                    break
+                except Exception:
+                    continue
+
+            if model is None:
                 model = genai.GenerativeModel("gemini-1.5-flash")
 
             prompt = f"""
-You are a Lead Quant & Wall Street Investment Strategist.
+You are a Lead Quant & Wall Street Investment Strategist powered by Gemini 3.7.
 Analyze the following multi-agent financial analytics data bundle for stocks: {tickers}.
 
 DATA SUMMARY:
