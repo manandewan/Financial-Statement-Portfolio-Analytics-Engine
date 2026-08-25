@@ -23,7 +23,10 @@ class QuantAnalystAgent:
         returns_df = prices_df.pct_change().dropna()
         tickers = list(prices_df.columns)
 
-        num_years = max((prices_df.index[-1] - prices_df.index[0]).days / 365.25, 0.5)
+        if prices_df.empty or len(prices_df) < 2:
+            num_years = 1.0
+        else:
+            num_years = max((prices_df.index[-1] - prices_df.index[0]).days / 365.25, 0.5)
 
         asset_metrics = {}
         for ticker in tickers:
@@ -33,18 +36,22 @@ class QuantAnalystAgent:
 
             start_p = prices.iloc[0]
             end_p = prices.iloc[-1]
-            cagr = ((end_p / start_p) ** (1.0 / num_years) - 1.0) * return_multiplier
+            cagr = ((end_p / (start_p + 1e-8)) ** (1.0 / num_years) - 1.0) * return_multiplier if start_p > 0 else 0.0
 
-            daily_rets = returns_df[ticker]
-            ann_return = daily_rets.mean() * 252 * return_multiplier
-            ann_vol = daily_rets.std() * np.sqrt(252)
+            if ticker in returns_df.columns and not returns_df[ticker].empty:
+                daily_rets = returns_df[ticker]
+                ann_return = daily_rets.mean() * 252 * return_multiplier
+                ann_vol = daily_rets.std() * np.sqrt(252)
+                cum_rets = (1 + daily_rets).cumprod()
+                peak = cum_rets.cummax()
+                drawdown = (cum_rets - peak) / (peak + 1e-8)
+                max_drawdown = float(drawdown.min())
+            else:
+                ann_return = 0.0
+                ann_vol = 1e-4
+                max_drawdown = 0.0
 
-            sharpe = (ann_return - self.risk_free_rate) / ann_vol if ann_vol > 0 else 0
-
-            cum_rets = (1 + daily_rets).cumprod()
-            peak = cum_rets.cummax()
-            drawdown = (cum_rets - peak) / peak
-            max_drawdown = float(drawdown.min())
+            sharpe = (ann_return - self.risk_free_rate) / (ann_vol + 1e-8) if ann_vol > 0 else 0
 
             asset_metrics[ticker] = {
                 'cagr': float(cagr),
@@ -54,9 +61,9 @@ class QuantAnalystAgent:
                 'max_drawdown': float(max_drawdown)
             }
 
-        cov_matrix = returns_df.cov() * 252
-        corr_matrix = returns_df.corr()
-        mean_returns = returns_df.mean() * 252 * return_multiplier
+        cov_matrix = returns_df.cov() * 252 if not returns_df.empty else pd.DataFrame(np.eye(len(tickers)), index=tickers, columns=tickers)
+        corr_matrix = returns_df.corr() if not returns_df.empty else pd.DataFrame(np.eye(len(tickers)), index=tickers, columns=tickers)
+        mean_returns = returns_df.mean() * 252 * return_multiplier if not returns_df.empty else pd.Series(0.1, index=tickers)
 
         return {
             'asset_metrics': asset_metrics,
@@ -71,9 +78,9 @@ class QuantAnalystAgent:
         Compute portfolio return, volatility, and Sharpe ratio.
         """
         port_return = np.sum(mean_returns * weights)
-        port_vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
-        sharpe = (port_return - self.risk_free_rate) / port_vol if port_vol > 0 else 0
-        return port_return, port_vol, sharpe
+        port_vol = np.sqrt(np.maximum(np.dot(weights.T, np.dot(cov_matrix, weights)), 1e-8))
+        sharpe = (port_return - self.risk_free_rate) / (port_vol + 1e-8)
+        return float(port_return), float(port_vol), float(sharpe)
 
     def _neg_sharpe_ratio(self, weights: np.ndarray, mean_returns: np.ndarray, cov_matrix: np.ndarray) -> float:
         return -self._portfolio_performance(weights, mean_returns, cov_matrix)[2]
@@ -90,6 +97,7 @@ class QuantAnalystAgent:
     ) -> Dict[str, Any]:
         """
         Compute optimal portfolio allocations, Efficient Frontier, and dynamic parameter adjustments.
+        Handles multi-asset and single-asset edge cases gracefully.
         """
         if risk_free_rate is not None:
             self.risk_free_rate = risk_free_rate
@@ -110,108 +118,100 @@ class QuantAnalystAgent:
         bounds = tuple((0.0, 1.0) for _ in range(num_assets))
         constraints = ({'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0})
 
-        # 1. Max Sharpe Ratio Optimization
-        opt_sharpe = minimize(
-            self._neg_sharpe_ratio,
-            init_weights,
-            args=(mean_returns, cov_matrix),
-            method='SLSQP',
-            bounds=bounds,
-            constraints=constraints
-        )
-
-        max_sharpe_weights = opt_sharpe.x if opt_sharpe.success else init_weights
-        max_sharpe_ret, max_sharpe_vol, max_sharpe_sr = self._portfolio_performance(
-            max_sharpe_weights, mean_returns, cov_matrix
-        )
-
-        # 2. Minimum Variance Optimization
-        opt_min_var = minimize(
-            self._portfolio_volatility,
-            init_weights,
-            args=(mean_returns, cov_matrix),
-            method='SLSQP',
-            bounds=bounds,
-            constraints=constraints
-        )
-
-        min_var_weights = opt_min_var.x if opt_min_var.success else init_weights
-        min_var_ret, min_var_vol, min_var_sr = self._portfolio_performance(
-            min_var_weights, mean_returns, cov_matrix
-        )
-
-        # 3. Target Return Optimization (if specified)
-        target_port_dict = None
-        if target_return is not None and len(mean_returns) > 1:
-            clamped_target = np.clip(target_return, min(mean_returns), max(mean_returns))
-            t_constraints = (
-                {'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0},
-                {'type': 'eq', 'fun': lambda w: np.sum(mean_returns * w) - clamped_target}
+        if num_assets == 1:
+            max_sharpe_weights = np.array([1.0])
+            min_var_weights = np.array([1.0])
+            max_sharpe_ret, max_sharpe_vol, max_sharpe_sr = self._portfolio_performance(
+                max_sharpe_weights, mean_returns, cov_matrix
             )
-            opt_target = minimize(
-                self._portfolio_volatility,
-                init_weights,
-                args=(mean_returns, cov_matrix),
-                method='SLSQP',
-                bounds=bounds,
-                constraints=t_constraints
-            )
-            if opt_target.success:
-                t_ret, t_vol, t_sr = self._portfolio_performance(opt_target.x, mean_returns, cov_matrix)
-                target_port_dict = {
-                    'weights': {tickers[i]: float(opt_target.x[i]) for i in range(num_assets)},
-                    'expected_return': float(t_ret),
-                    'volatility': float(t_vol),
-                    'sharpe_ratio': float(t_sr)
-                }
-
-        # 4. Efficient Frontier curve generation
-        min_r = min(mean_returns)
-        max_r = max(mean_returns)
-        if min_r == max_r:
-            target_returns = np.array([min_r])
+            min_var_ret, min_var_vol, min_var_sr = max_sharpe_ret, max_sharpe_vol, max_sharpe_sr
+            target_returns = [float(mean_returns[0])]
+            efficient_volatilities = [float(max_sharpe_vol)]
+            efficient_weights = [[1.0]]
+            mc_returns = [float(mean_returns[0])]
+            mc_volatilities = [float(max_sharpe_vol)]
+            mc_sharpe = [float(max_sharpe_sr)]
         else:
-            target_returns = np.linspace(min_r, max_r, 50)
-
-        efficient_volatilities = []
-        efficient_weights = []
-
-        for target in target_returns:
-            target_constraints = (
-                {'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0},
-                {'type': 'eq', 'fun': lambda w: np.sum(mean_returns * w) - target}
+            # 1. Max Sharpe Ratio Optimization
+            opt_sharpe = minimize(
+                self._neg_sharpe_ratio,
+                init_weights,
+                args=(mean_returns, cov_matrix),
+                method='SLSQP',
+                bounds=bounds,
+                constraints=constraints
             )
-            res = minimize(
+
+            max_sharpe_weights = opt_sharpe.x if opt_sharpe.success else init_weights
+            max_sharpe_ret, max_sharpe_vol, max_sharpe_sr = self._portfolio_performance(
+                max_sharpe_weights, mean_returns, cov_matrix
+            )
+
+            # 2. Minimum Variance Optimization
+            opt_min_var = minimize(
                 self._portfolio_volatility,
                 init_weights,
                 args=(mean_returns, cov_matrix),
                 method='SLSQP',
                 bounds=bounds,
-                constraints=target_constraints
+                constraints=constraints
             )
-            if res.success:
-                efficient_volatilities.append(res.fun)
-                efficient_weights.append(res.x.tolist())
+
+            min_var_weights = opt_min_var.x if opt_min_var.success else init_weights
+            min_var_ret, min_var_vol, min_var_sr = self._portfolio_performance(
+                min_var_weights, mean_returns, cov_matrix
+            )
+
+            # 3. Efficient Frontier curve generation
+            min_r = float(min(mean_returns))
+            max_r = float(max(mean_returns))
+            if abs(min_r - max_r) < 1e-5:
+                target_returns = np.array([min_r])
             else:
-                efficient_volatilities.append(np.nan)
-                efficient_weights.append([0.0]*num_assets)
+                target_returns = np.linspace(min_r, max_r, 50)
 
-        # 5. Monte Carlo Simulation (with updated risk-free rate & multiplier)
-        num_simulations = 2500
-        mc_returns = np.zeros(num_simulations)
-        mc_volatilities = np.zeros(num_simulations)
-        mc_sharpe = np.zeros(num_simulations)
-        mc_weights = np.zeros((num_simulations, num_assets))
+            efficient_volatilities = []
+            efficient_weights = []
 
-        np.random.seed(42)
-        for i in range(num_simulations):
-            w = np.random.random(num_assets)
-            w /= np.sum(w)
-            r, v, s = self._portfolio_performance(w, mean_returns, cov_matrix)
-            mc_returns[i] = r
-            mc_volatilities[i] = v
-            mc_sharpe[i] = s
-            mc_weights[i] = w
+            for target in target_returns:
+                target_constraints = (
+                    {'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0},
+                    {'type': 'eq', 'fun': lambda w: np.sum(mean_returns * w) - target}
+                )
+                res = minimize(
+                    self._portfolio_volatility,
+                    init_weights,
+                    args=(mean_returns, cov_matrix),
+                    method='SLSQP',
+                    bounds=bounds,
+                    constraints=target_constraints
+                )
+                if res.success:
+                    efficient_volatilities.append(float(res.fun))
+                    efficient_weights.append(res.x.tolist())
+                else:
+                    efficient_volatilities.append(np.nan)
+                    efficient_weights.append([0.0]*num_assets)
+
+            # 4. Monte Carlo Simulation
+            num_simulations = 2500
+            mc_returns = np.zeros(num_simulations)
+            mc_volatilities = np.zeros(num_simulations)
+            mc_sharpe = np.zeros(num_simulations)
+
+            np.random.seed(42)
+            for i in range(num_simulations):
+                w = np.random.random(num_assets)
+                w /= np.sum(w)
+                r, v, s = self._portfolio_performance(w, mean_returns, cov_matrix)
+                mc_returns[i] = r
+                mc_volatilities[i] = v
+                mc_sharpe[i] = s
+
+            target_returns = target_returns.tolist()
+            mc_returns = mc_returns.tolist()
+            mc_volatilities = mc_volatilities.tolist()
+            mc_sharpe = mc_sharpe.tolist()
 
         max_sharpe_dict = {
             'weights': {tickers[i]: float(max_sharpe_weights[i]) for i in range(num_assets)},
@@ -234,16 +234,15 @@ class QuantAnalystAgent:
             'returns_df': metrics_res['returns_df'],
             'max_sharpe_portfolio': max_sharpe_dict,
             'min_variance_portfolio': min_var_dict,
-            'target_portfolio': target_port_dict,
             'efficient_frontier': {
-                'target_returns': target_returns.tolist(),
+                'target_returns': target_returns,
                 'volatilities': efficient_volatilities,
                 'weights': efficient_weights
             },
             'monte_carlo': {
-                'returns': mc_returns.tolist(),
-                'volatilities': mc_volatilities.tolist(),
-                'sharpe_ratios': mc_sharpe.tolist()
+                'returns': mc_returns,
+                'volatilities': mc_volatilities,
+                'sharpe_ratios': mc_sharpe
             },
             'correlation_matrix': corr_matrix.to_dict(),
             'risk_free_rate': self.risk_free_rate,

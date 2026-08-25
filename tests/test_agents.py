@@ -35,19 +35,19 @@ class TestAgents(unittest.TestCase):
             'AAPL': {
                 'income_statement': pd.DataFrame({'2024': {'Net Income': 100000, 'Total Revenue': 400000}}),
                 'balance_sheet': pd.DataFrame({'2024': {'Total Stockholder Equity': 500000, 'Total Debt': 200000, 'Current Assets': 150000, 'Current Liabilities': 100000}}),
-                'cash_flow': pd.DataFrame({'2024': {'Free Cash Flow': 90000}}),
+                'cash_flow': pd.DataFrame({'2024': {'Free Cash Flow': 90000, 'Operating Cash Flow': 110000, 'Capital Expenditure': -20000}}),
                 'info': {'marketCap': 2000000, 'sector': 'Technology'}
             },
             'MSFT': {
                 'income_statement': pd.DataFrame({'2024': {'Net Income': 80000, 'Total Revenue': 300000}}),
                 'balance_sheet': pd.DataFrame({'2024': {'Total Stockholder Equity': 400000, 'Total Debt': 300000, 'Current Assets': 120000, 'Current Liabilities': 80000}}),
-                'cash_flow': pd.DataFrame({'2024': {'Free Cash Flow': 70000}}),
+                'cash_flow': pd.DataFrame({'2024': {'Free Cash Flow': 70000, 'Operating Cash Flow': 90000, 'Capital Expenditure': -20000}}),
                 'info': {'marketCap': 1800000, 'sector': 'Technology'}
             },
             'GOOGL': {
                 'income_statement': pd.DataFrame({'2024': {'Net Income': 70000, 'Total Revenue': 280000}}),
                 'balance_sheet': pd.DataFrame({'2024': {'Total Stockholder Equity': 350000, 'Total Debt': 100000, 'Current Assets': 180000, 'Current Liabilities': 90000}}),
-                'cash_flow': pd.DataFrame({'2024': {'Free Cash Flow': 60000}}),
+                'cash_flow': pd.DataFrame({'2024': {'Free Cash Flow': 60000, 'Operating Cash Flow': 75000, 'Capital Expenditure': -15000}}),
                 'info': {'marketCap': 1500000, 'sector': 'Communication Services'}
             }
         }
@@ -72,18 +72,21 @@ class TestAgents(unittest.TestCase):
         self.assertAlmostEqual(aapl_m['current_ratio'], 1.5, places=2)
         self.assertAlmostEqual(aapl_m['return_on_equity'], 0.20, places=2)
         self.assertAlmostEqual(aapl_m['free_cash_flow_yield'], 0.045, places=3)
+        self.assertIn("Conservative Debt (D/E < 1.0)", aapl_m['flags'])
 
     def test_ml_predictive_analyst_agent(self):
         ml_agent = MLPredictiveAnalystAgent(model_type="random_forest")
         res = ml_agent.predict(self.raw_data)
 
-        self.assertIn('predicted_annualized_returns', res)
-        self.assertIn('feature_importances', res)
-        self.assertIn('AAPL', res['predicted_annualized_returns'])
+        self.assertIn('ml_results', res)
+        self.assertIn('latest_features', res)
+        self.assertIn('AAPL', res['ml_results'])
+        self.assertIn('rsi_14', res['latest_features']['AAPL'])
+        self.assertIn('volatility_20d', res['latest_features']['AAPL'])
 
     def test_quant_analyst_agent(self):
         quant = QuantAnalystAgent(risk_free_rate=0.04)
-        opt_res = quant.optimize_portfolio(self.raw_data)
+        opt_res = quant.optimize_portfolio(self.raw_data, return_multiplier=1.2)
 
         self.assertIn('max_sharpe_portfolio', opt_res)
         self.assertIn('min_variance_portfolio', opt_res)
@@ -93,14 +96,31 @@ class TestAgents(unittest.TestCase):
         sum_weights = sum(weights.values())
         self.assertAlmostEqual(sum_weights, 1.0, places=4)
 
+        for t, w in weights.items():
+            self.assertGreaterEqual(w, -1e-5)
+
+    def test_single_asset_quant_edge_case(self):
+        single_data = {
+            'prices': self.sample_prices[['AAPL']],
+            'tickers': ['AAPL'],
+            'start_date': '2024-01-01',
+            'end_date': '2024-12-31',
+            'statements': {'AAPL': self.sample_statements['AAPL']}
+        }
+        quant = QuantAnalystAgent(risk_free_rate=0.04)
+        opt_res = quant.optimize_portfolio(single_data)
+        self.assertEqual(opt_res['max_sharpe_portfolio']['weights']['AAPL'], 1.0)
+        self.assertEqual(opt_res['min_variance_portfolio']['weights']['AAPL'], 1.0)
+
     def test_coordinator(self):
         coordinator = AgentSystemCoordinator()
         coordinator.data_architect.fetch_data = lambda tickers, start_date, end_date: self.raw_data
-        bundle = coordinator.run_pipeline(['AAPL', 'MSFT', 'GOOGL'])
+        bundle = coordinator.run_pipeline(['AAPL', 'MSFT', 'GOOGL'], risk_free_rate=0.04, return_multiplier=1.0)
 
         self.assertIn('fundamental', bundle)
         self.assertIn('ml_predictive', bundle)
         self.assertIn('quant', bundle)
+        self.assertIn('ai_report', bundle)
         self.assertEqual(len(bundle['tickers']), 3)
 
 if __name__ == '__main__':

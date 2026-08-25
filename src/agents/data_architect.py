@@ -24,7 +24,8 @@ class DataArchitectAgent:
         if not tickers:
             raise ValueError("Ticker list cannot be empty.")
 
-        tickers = [t.strip().upper() for t in tickers if t.strip()]
+        # Clean and deduplicate tickers while preserving order
+        tickers = list(dict.fromkeys([t.strip().upper() for t in tickers if t.strip()]))
 
         if end_date is None:
             end_date = datetime.date.today().strftime("%Y-%m-%d")
@@ -52,7 +53,7 @@ class DataArchitectAgent:
             except Exception as ex:
                 logger.warning(f"Attempt {attempt+1} download failed: {ex}")
 
-        if price_data.empty:
+        if price_data.empty or (isinstance(price_data, pd.DataFrame) and len(price_data) < 2):
             # Fallback: fetch ticker by ticker
             df_list = {}
             for t in tickers:
@@ -67,32 +68,40 @@ class DataArchitectAgent:
                 price_data = pd.DataFrame(df_list)
 
         # Handle single vs multiple tickers from yfinance
-        if isinstance(price_data.columns, pd.MultiIndex):
-            if 'Adj Close' in price_data.columns.levels[0]:
-                adj_close = price_data['Adj Close']
-            elif 'Close' in price_data.columns.levels[0]:
-                adj_close = price_data['Close']
+        adj_close = pd.DataFrame()
+        if not price_data.empty:
+            if isinstance(price_data.columns, pd.MultiIndex):
+                if 'Adj Close' in price_data.columns.levels[0]:
+                    adj_close = price_data['Adj Close']
+                elif 'Close' in price_data.columns.levels[0]:
+                    adj_close = price_data['Close']
+                else:
+                    adj_close = price_data.iloc[:, :len(tickers)]
             else:
-                adj_close = price_data.iloc[:, :len(tickers)]
-        else:
-            if 'Adj Close' in price_data.columns:
-                adj_close = price_data[['Adj Close']]
-                adj_close.columns = tickers
-            elif 'Close' in price_data.columns:
-                adj_close = price_data[['Close']]
-                adj_close.columns = tickers
-            else:
-                adj_close = price_data
+                if 'Adj Close' in price_data.columns:
+                    adj_close = price_data[['Adj Close']]
+                    adj_close.columns = tickers
+                elif 'Close' in price_data.columns:
+                    adj_close = price_data[['Close']]
+                    adj_close.columns = tickers
+                else:
+                    adj_close = price_data
 
         if isinstance(adj_close, pd.Series):
             adj_close = adj_close.to_frame(name=tickers[0])
 
-        # Clean missing price values
-        adj_close = adj_close.ffill().bfill().dropna(how='all')
+        # Drop columns that are completely empty / invalid
+        valid_price_cols = [col for col in adj_close.columns if not adj_close[col].dropna().empty]
+        if valid_price_cols:
+            adj_close = adj_close[valid_price_cols]
+            adj_close = adj_close.ffill().bfill().dropna(how='all')
+            valid_tickers = [t for t in tickers if t in adj_close.columns]
+        else:
+            valid_tickers = tickers
 
         # Statements for each ticker - Isolated robust fetching
         statements = {}
-        for ticker in tickers:
+        for ticker in valid_tickers:
             logger.info(f"Fetching statements for {ticker}")
             t_obj = yf.Ticker(ticker)
             
@@ -126,7 +135,6 @@ class DataArchitectAgent:
             # 4. Fast Info & Info (with fallback)
             info = {}
             try:
-                # Fast info is instant and doesn't rate-limit on Cloud IPs
                 if hasattr(t_obj, 'fast_info'):
                     for k in ['market_cap', 'last_price', 'shares', 'year_high', 'year_low', 'currency']:
                         if hasattr(t_obj.fast_info, k):
@@ -141,7 +149,7 @@ class DataArchitectAgent:
                 if isinstance(full_info, dict):
                     info.update(full_info)
             except Exception as e:
-                logger.info(f"Full info lookup skipped for {ticker} (using fast_info & statements): {e}")
+                logger.info(f"Full info lookup skipped for {ticker}: {e}")
 
             statements[ticker] = {
                 'income_statement': inc_stmt if inc_stmt is not None else pd.DataFrame(),
@@ -152,7 +160,7 @@ class DataArchitectAgent:
 
         return {
             'prices': adj_close,
-            'tickers': tickers,
+            'tickers': valid_tickers,
             'start_date': start_date,
             'end_date': end_date,
             'statements': statements

@@ -1,13 +1,27 @@
 import os
 import json
 import logging
+import warnings
 from typing import Dict, Any
 
+# Suppress library deprecation warnings for clean demo presentations
+warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
+
+HAS_GENAI = False
+USE_NEW_SDK = False
+
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
     HAS_GENAI = True
+    USE_NEW_SDK = True
 except ImportError:
-    HAS_GENAI = False
+    try:
+        import google.generativeai as genai_legacy
+        HAS_GENAI = True
+        USE_NEW_SDK = False
+    except ImportError:
+        HAS_GENAI = False
 
 logger = logging.getLogger("AIPortfolioAnalyst")
 
@@ -38,30 +52,14 @@ class AIPortfolioAnalystAgent:
             return {
                 'status': 'offline',
                 'report': (
-                    "### 💡 Gemini 3.7 AI Executive Report (Offline Mode)\n"
-                    "To generate a real-time Wall Street AI Investment Memo synthesizing "
-                    "Fundamental Ratios, Machine Learning Return Forecasts, and MPT Portfolio Weights, "
-                    "please enter your free **Gemini API Key** in the sidebar!"
+                    "### 💡 Gemini 3.7 AI Executive Report (Offline Mode)\n\n"
+                    "To generate an automated, real-time Wall Street Investment Memo synthesizing "
+                    "**Fundamental Health Ratios**, **Machine Learning Forward Return Forecasts**, and **MPT Portfolio Weights**, "
+                    "enter your **Gemini API Key** in the sidebar!"
                 )
             }
 
-        try:
-            genai.configure(api_key=self.api_key)
-            
-            # Prioritize Gemini 3.7 Flash, with graceful fallbacks
-            model = None
-            models_to_try = [self.model_name, "gemini-3.7-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
-            for m_name in models_to_try:
-                try:
-                    model = genai.GenerativeModel(m_name)
-                    break
-                except Exception:
-                    continue
-
-            if model is None:
-                model = genai.GenerativeModel("gemini-1.5-flash")
-
-            prompt = f"""
+        prompt = f"""
 You are a Lead Quant & Wall Street Investment Strategist powered by Gemini 3.7.
 Analyze the following multi-agent financial analytics data bundle for stocks: {tickers}.
 
@@ -90,8 +88,28 @@ Write an **Executive Portfolio Investment Memo** covering:
 Format the response cleanly in GitHub Markdown with emojis and bold section headings. Keep it concise, analytical, and professional.
 """
 
-            response = model.generate_content(prompt)
-            report_text = response.text if hasattr(response, 'text') else str(response)
+        try:
+            if USE_NEW_SDK:
+                client = genai.Client(api_key=self.api_key)
+                response = client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt
+                )
+                report_text = response.text
+            else:
+                genai_legacy.configure(api_key=self.api_key)
+                model = None
+                models_to_try = [self.model_name, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+                for m_name in models_to_try:
+                    try:
+                        model = genai_legacy.GenerativeModel(m_name)
+                        break
+                    except Exception:
+                        continue
+                if model is None:
+                    model = genai_legacy.GenerativeModel("gemini-1.5-flash")
+                response = model.generate_content(prompt)
+                report_text = response.text if hasattr(response, 'text') else str(response)
 
             return {
                 'status': 'success',

@@ -25,7 +25,6 @@ class FundamentalAnalystAgent:
         if df is None or df.empty:
             return np.nan
 
-        # Lowercase index mapping
         index_map = {str(idx).strip().lower(): idx for idx in df.index}
         
         for key in possible_keys:
@@ -63,6 +62,14 @@ class FundamentalAnalystAgent:
         prices_df = raw_data.get('prices', pd.DataFrame())
 
         metrics_summary = {}
+
+        sector_defaults = {
+            'AAPL': 'Technology', 'MSFT': 'Technology', 'GOOGL': 'Communication Services',
+            'GOOG': 'Communication Services', 'AMZN': 'Consumer Cyclical', 'NVDA': 'Technology',
+            'TSLA': 'Consumer Cyclical', 'META': 'Communication Services', 'NFLX': 'Communication Services',
+            'JPM': 'Financial Services', 'JNJ': 'Healthcare', 'PG': 'Consumer Defensive',
+            'WMT': 'Consumer Defensive', 'XOM': 'Energy', 'AMD': 'Technology', 'CRM': 'Technology'
+        }
 
         for ticker in tickers:
             t_data = statements.get(ticker, {})
@@ -171,10 +178,13 @@ class FundamentalAnalystAgent:
 
             # Flags & Signals
             flags = []
+            if not pd.isna(total_equity) and total_equity < 0:
+                flags.append("Negative Equity Deficit")
+
             if not pd.isna(debt_to_equity):
                 if debt_to_equity > 2.5:
                     flags.append("High Debt Leverage (D/E > 2.5)")
-                elif debt_to_equity < 1.0:
+                elif 0 <= debt_to_equity < 1.0:
                     flags.append("Conservative Debt (D/E < 1.0)")
 
             if not pd.isna(current_ratio):
@@ -193,6 +203,10 @@ class FundamentalAnalystAgent:
                 if fcf_yield > 0.03:
                     flags.append("Strong FCF Yield (> 3%)")
 
+            sector = info.get('sector')
+            if not sector or sector == 'N/A':
+                sector = sector_defaults.get(ticker, 'Equity Asset')
+
             metrics_summary[ticker] = {
                 'debt_to_equity': debt_to_equity,
                 'current_ratio': current_ratio,
@@ -203,7 +217,7 @@ class FundamentalAnalystAgent:
                 'total_equity': total_equity,
                 'total_debt': total_debt,
                 'free_cash_flow': free_cash_flow,
-                'sector': info.get('sector', 'Technology' if ticker in ['AAPL', 'MSFT', 'NVDA'] else 'N/A'),
+                'sector': sector,
                 'industry': info.get('industry', 'N/A'),
                 'flags': flags
             }
