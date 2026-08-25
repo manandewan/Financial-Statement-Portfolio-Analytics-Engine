@@ -20,12 +20,6 @@ st.set_page_config(
 # Custom Styling (Mobile-Responsive & Modern Dark Aesthetic)
 st.markdown("""
 <style>
-    .header-container {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        margin-bottom: 0.5rem;
-    }
     .main-header {
         font-size: 2.1rem;
         font-weight: 700;
@@ -57,7 +51,6 @@ st.markdown("""
     .pill-ai { background-color: #E53E3E; color: white; }
     .pill-dev { background-color: #DD6B20; color: white; }
 
-    /* Mobile Screen Responsiveness */
     @media (max-width: 768px) {
         .main-header {
             font-size: 1.4rem !important;
@@ -77,9 +70,9 @@ st.markdown("""
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, gemini_key):
+def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplier, gemini_key):
     """
-    Cached helper to execute multi-agent coordinator pipeline.
+    Cached helper to execute multi-agent coordinator pipeline with dynamic expected return parameters.
     """
     coordinator = AgentSystemCoordinator(gemini_api_key=gemini_key)
     return coordinator.run_pipeline(
@@ -87,6 +80,7 @@ def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, gemini_key):
         start_date=start_str,
         end_date=end_str,
         risk_free_rate=rf_rate,
+        return_multiplier=ret_multiplier,
         gemini_api_key=gemini_key
     )
 
@@ -121,9 +115,17 @@ def main():
     with col_s2:
         end_date = st.date_input("End Date", datetime.date.today())
 
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 Return & Risk Parameters")
+    
     # Risk-free rate
-    rf_rate_pct = st.sidebar.slider("Risk-Free Rate (%)", min_value=0.0, max_value=10.0, value=4.0, step=0.25)
+    rf_rate_pct = st.sidebar.slider("Risk-Free Rate ($R_f$ %)", min_value=0.0, max_value=12.0, value=4.0, step=0.25)
     rf_rate = rf_rate_pct / 100.0
+
+    # Expected Return Adjustment Slider
+    return_shift_pct = st.sidebar.slider("Expected Return Adjustment (%)", min_value=-50, max_value=100, value=0, step=5,
+                                        help="Scale expected future asset returns (e.g. +20% Bullish or -20% Bearish outlook). Affects all MPT allocations, Efficient Frontier curves, and Sharpe ratios.")
+    ret_multiplier = 1.0 + (return_shift_pct / 100.0)
 
     # Optional Gemini API Key
     st.sidebar.markdown("---")
@@ -178,6 +180,7 @@ def main():
                 start_str=start_date.strftime("%Y-%m-%d"),
                 end_str=end_date.strftime("%Y-%m-%d"),
                 rf_rate=rf_rate,
+                ret_multiplier=ret_multiplier,
                 gemini_key=gemini_key
             )
         except Exception as e:
@@ -286,7 +289,7 @@ def main():
     # ----------------------------------------------------
     with tab2:
         st.subheader("Historical Stock Performance & Risk Metrics")
-        st.markdown("Ingested by **Agent 1 (Data Architect)** and processed by **Agent 3 (Quant Analyst)**.")
+        st.markdown(f"Ingested by **Agent 1 (Data Architect)** and processed by **Agent 3 (Quant Analyst)** (Expected Return Scale: **{ret_multiplier:.2f}x**).")
 
         # Rebased Cumulative Returns Plot
         normalized_prices = (prices_df / prices_df.iloc[0]) * 100
@@ -308,9 +311,9 @@ def main():
             risk_table_data.append({
                 "Ticker": t,
                 "CAGR": f"{am.get('cagr', 0)*100:.2f}%",
-                "Annualized Return": f"{am.get('annualized_return', 0)*100:.2f}%",
+                "Expected Annualized Return": f"{am.get('annualized_return', 0)*100:.2f}%",
                 "Annualized Volatility": f"{am.get('annualized_volatility', 0)*100:.2f}%",
-                "Sharpe Ratio": f"{am.get('sharpe_ratio', 0):.2f}",
+                f"Sharpe Ratio (Rf={rf_rate_pct:.1f}%)": f"{am.get('sharpe_ratio', 0):.2f}",
                 "Max Drawdown": f"{am.get('max_drawdown', 0)*100:.2f}%"
             })
 
@@ -406,17 +409,17 @@ def main():
     # ----------------------------------------------------
     with tab4:
         st.subheader("Modern Portfolio Theory (MPT) Optimization")
-        st.markdown("Calculated by **Agent 3 (Quantitative Analyst)** using `scipy.optimize` and Monte Carlo simulation.")
+        st.markdown(f"Calculated by **Agent 3 (Quantitative Analyst)** under **Risk-Free Rate = {rf_rate_pct:.2f}%** and **Return Multiplier = {ret_multiplier:.2f}x**.")
 
         max_sharpe = quant_res['max_sharpe_portfolio']
         min_var = quant_res['min_variance_portfolio']
         mc = quant_res['monte_carlo']
         ef = quant_res['efficient_frontier']
 
-        # Highlight Metric Cards (Auto-wraps gracefully on mobile)
+        # Highlight Metric Cards
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
-            st.metric("Max Sharpe Return", f"{max_sharpe['expected_return']*100:.2f}%")
+            st.metric("Max Sharpe Expected Return", f"{max_sharpe['expected_return']*100:.2f}%")
         with col_m2:
             st.metric("Max Sharpe Volatility", f"{max_sharpe['volatility']*100:.2f}%")
         with col_m3:
@@ -440,7 +443,7 @@ def main():
                 size=5,
                 color=mc['sharpe_ratios'],
                 colorscale='Viridis',
-                colorbar=dict(title="Sharpe"),
+                colorbar=dict(title=f"Sharpe (Rf={rf_rate_pct:.1f}%)"),
                 showscale=True
             ),
             name="Simulated Portfolios",
@@ -467,7 +470,7 @@ def main():
             mode='markers',
             marker=dict(color='red', size=14, symbol='star'),
             name="Max Sharpe",
-            text=f"Max Sharpe<br>Return: {max_sharpe['expected_return']*100:.2f}%<br>Vol: {max_sharpe['volatility']*100:.2f}%"
+            text=f"Max Sharpe<br>Return: {max_sharpe['expected_return']*100:.2f}%<br>Vol: {max_sharpe['volatility']*100:.2f}%<br>Sharpe: {max_sharpe['sharpe_ratio']:.2f}"
         ))
 
         # Highlight Min Variance Portfolio
@@ -482,7 +485,7 @@ def main():
 
         fig_ef.update_layout(
             xaxis_title="Annualized Volatility (%)",
-            yaxis_title="Annualized Expected Return (%)",
+            yaxis_title=f"Annualized Expected Return (%) [Scale: {ret_multiplier:.2f}x]",
             hovermode="closest",
             margin=dict(l=10, r=10, t=40, b=20),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
@@ -543,10 +546,10 @@ def main():
         if abs(total_w - 100.0) > 0.1:
             st.warning(f"Total Portfolio Weight is **{total_w:.1f}%**. Please adjust sliders to equal exactly 100.0%.")
         else:
-            # Calculate custom portfolio metrics
+            # Calculate custom portfolio metrics with updated return multiplier and risk-free rate
             w_vec = np.array([user_weights[t] / 100.0 for t in tickers])
             ret_series = quant_res['returns_df']
-            mean_rets = ret_series.mean() * 252
+            mean_rets = ret_series.mean() * 252 * ret_multiplier
             cov_mat = ret_series.cov() * 252
 
             custom_ret = np.sum(mean_rets * w_vec)
@@ -565,6 +568,8 @@ def main():
         st.markdown("### Export Portfolio Configuration")
         export_bundle = {
             "tickers": tickers,
+            "risk_free_rate": rf_rate,
+            "return_multiplier": ret_multiplier,
             "max_sharpe_weights": max_sharpe['weights'],
             "min_variance_weights": min_var['weights'],
             "user_custom_weights": user_weights if abs(total_w - 100.0) <= 0.1 else "Invalid"

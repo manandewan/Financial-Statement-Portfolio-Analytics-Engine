@@ -18,8 +18,8 @@ class AgentSystemCoordinator:
     - Agent 2: Fundamental Analyst
     - Agent 3: Quantitative Analyst
     - Agent 4: Predictive ML Analyst
-    - Agent 6: Gemini AI Executive Summarizer
-    to pass compiled analytics to Agent 5 (Full-Stack Dashboard Developer).
+    - Agent 5: Gemini AI Executive Summarizer
+    - Agent 6: Full-Stack Dashboard Developer
     """
     def __init__(self, gemini_api_key: str = None):
         self.data_architect = DataArchitectAgent()
@@ -34,15 +34,12 @@ class AgentSystemCoordinator:
         start_date: str = None,
         end_date: str = None,
         risk_free_rate: float = 0.04,
+        return_multiplier: float = 1.0,
+        target_return: float = None,
         gemini_api_key: str = None
     ) -> Dict[str, Any]:
         """
-        Execute full multi-agent workflow sequentially:
-        1. Data Architect -> Ingest clean data
-        2. Fundamental Analyst -> Compute ratio metrics
-        3. Predictive ML Analyst -> Forecast forward returns with Random Forest
-        4. Quant Analyst -> Optimize portfolio with MPT
-        5. Gemini AI Analyst -> Synthesize insights into executive AI report
+        Execute full multi-agent workflow with dynamic expected return and risk-free rate parameters.
         """
         if gemini_api_key:
             self.ai_analyst.api_key = gemini_api_key
@@ -56,8 +53,13 @@ class AgentSystemCoordinator:
         logger.info("Step 3: Predictive ML Analyst training Random Forest regressor & forecasting returns...")
         ml_output = self.ml_analyst.predict(raw_data)
 
-        logger.info("Step 4: Quantitative Analyst optimizing portfolio with MPT...")
-        quant_output = self.quant_analyst.optimize_portfolio(raw_data, risk_free_rate=risk_free_rate)
+        logger.info(f"Step 4: Quantitative Analyst optimizing portfolio with rf={risk_free_rate}, multiplier={return_multiplier}...")
+        quant_output = self.quant_analyst.optimize_portfolio(
+            raw_data, 
+            risk_free_rate=risk_free_rate, 
+            return_multiplier=return_multiplier,
+            target_return=target_return
+        )
 
         logger.info("Step 5: Compiling analytics data bundle...")
         bundle = {

@@ -10,13 +10,13 @@ class QuantAnalystAgent:
     """
     Agent 3: Quantitative Analyst
     Portfolio Optimizer relying on Modern Portfolio Theory (MPT) and mathematical optimization
-    to calculate risk/return metrics, efficient frontier, and optimal asset allocations.
+    to calculate risk/return metrics, efficient frontier, target return portfolios, and optimal asset allocations.
     """
     def __init__(self, risk_free_rate: float = 0.04):
         self.name = "Quantitative Analyst"
         self.risk_free_rate = risk_free_rate
 
-    def calculate_asset_metrics(self, prices_df: pd.DataFrame) -> Dict[str, Any]:
+    def calculate_asset_metrics(self, prices_df: pd.DataFrame, return_multiplier: float = 1.0) -> Dict[str, Any]:
         """
         Calculate individual asset risk & return metrics: CAGR, Volatility, Max Drawdown, Sharpe.
         """
@@ -33,15 +33,14 @@ class QuantAnalystAgent:
 
             start_p = prices.iloc[0]
             end_p = prices.iloc[-1]
-            cagr = (end_p / start_p) ** (1.0 / num_years) - 1.0
+            cagr = ((end_p / start_p) ** (1.0 / num_years) - 1.0) * return_multiplier
 
             daily_rets = returns_df[ticker]
-            ann_return = daily_rets.mean() * 252
+            ann_return = daily_rets.mean() * 252 * return_multiplier
             ann_vol = daily_rets.std() * np.sqrt(252)
 
             sharpe = (ann_return - self.risk_free_rate) / ann_vol if ann_vol > 0 else 0
 
-            # Maximum Drawdown
             cum_rets = (1 + daily_rets).cumprod()
             peak = cum_rets.cummax()
             drawdown = (cum_rets - peak) / peak
@@ -57,10 +56,11 @@ class QuantAnalystAgent:
 
         cov_matrix = returns_df.cov() * 252
         corr_matrix = returns_df.corr()
+        mean_returns = returns_df.mean() * 252 * return_multiplier
 
         return {
             'asset_metrics': asset_metrics,
-            'mean_returns': returns_df.mean() * 252,
+            'mean_returns': mean_returns,
             'cov_matrix': cov_matrix,
             'corr_matrix': corr_matrix,
             'returns_df': returns_df
@@ -81,9 +81,15 @@ class QuantAnalystAgent:
     def _portfolio_volatility(self, weights: np.ndarray, mean_returns: np.ndarray, cov_matrix: np.ndarray) -> float:
         return self._portfolio_performance(weights, mean_returns, cov_matrix)[1]
 
-    def optimize_portfolio(self, raw_data: Dict[str, Any], risk_free_rate: float = None) -> Dict[str, Any]:
+    def optimize_portfolio(
+        self, 
+        raw_data: Dict[str, Any], 
+        risk_free_rate: float = None,
+        return_multiplier: float = 1.0,
+        target_return: float = None
+    ) -> Dict[str, Any]:
         """
-        Compute optimal portfolio allocations, Efficient Frontier, and Monte Carlo portfolio simulation.
+        Compute optimal portfolio allocations, Efficient Frontier, and dynamic parameter adjustments.
         """
         if risk_free_rate is not None:
             self.risk_free_rate = risk_free_rate
@@ -95,12 +101,11 @@ class QuantAnalystAgent:
         tickers = list(prices_df.columns)
         num_assets = len(tickers)
 
-        metrics_res = self.calculate_asset_metrics(prices_df)
+        metrics_res = self.calculate_asset_metrics(prices_df, return_multiplier=return_multiplier)
         mean_returns = metrics_res['mean_returns'].values
         cov_matrix = metrics_res['cov_matrix'].values
         corr_matrix = metrics_res['corr_matrix']
 
-        # Equal weight baseline
         init_weights = np.array([1.0 / num_assets] * num_assets)
         bounds = tuple((0.0, 1.0) for _ in range(num_assets))
         constraints = ({'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0})
@@ -135,8 +140,39 @@ class QuantAnalystAgent:
             min_var_weights, mean_returns, cov_matrix
         )
 
-        # 3. Efficient Frontier curve generation
-        target_returns = np.linspace(min(mean_returns), max(mean_returns), 50)
+        # 3. Target Return Optimization (if specified)
+        target_port_dict = None
+        if target_return is not None and len(mean_returns) > 1:
+            clamped_target = np.clip(target_return, min(mean_returns), max(mean_returns))
+            t_constraints = (
+                {'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0},
+                {'type': 'eq', 'fun': lambda w: np.sum(mean_returns * w) - clamped_target}
+            )
+            opt_target = minimize(
+                self._portfolio_volatility,
+                init_weights,
+                args=(mean_returns, cov_matrix),
+                method='SLSQP',
+                bounds=bounds,
+                constraints=t_constraints
+            )
+            if opt_target.success:
+                t_ret, t_vol, t_sr = self._portfolio_performance(opt_target.x, mean_returns, cov_matrix)
+                target_port_dict = {
+                    'weights': {tickers[i]: float(opt_target.x[i]) for i in range(num_assets)},
+                    'expected_return': float(t_ret),
+                    'volatility': float(t_vol),
+                    'sharpe_ratio': float(t_sr)
+                }
+
+        # 4. Efficient Frontier curve generation
+        min_r = min(mean_returns)
+        max_r = max(mean_returns)
+        if min_r == max_r:
+            target_returns = np.array([min_r])
+        else:
+            target_returns = np.linspace(min_r, max_r, 50)
+
         efficient_volatilities = []
         efficient_weights = []
 
@@ -160,7 +196,7 @@ class QuantAnalystAgent:
                 efficient_volatilities.append(np.nan)
                 efficient_weights.append([0.0]*num_assets)
 
-        # 4. Monte Carlo Simulation (for background visual scatter plot)
+        # 5. Monte Carlo Simulation (with updated risk-free rate & multiplier)
         num_simulations = 2500
         mc_returns = np.zeros(num_simulations)
         mc_volatilities = np.zeros(num_simulations)
@@ -177,7 +213,6 @@ class QuantAnalystAgent:
             mc_sharpe[i] = s
             mc_weights[i] = w
 
-        # Build clean output structures
         max_sharpe_dict = {
             'weights': {tickers[i]: float(max_sharpe_weights[i]) for i in range(num_assets)},
             'expected_return': float(max_sharpe_ret),
@@ -195,9 +230,11 @@ class QuantAnalystAgent:
         return {
             'tickers': tickers,
             'asset_metrics': metrics_res['asset_metrics'],
+            'mean_returns': mean_returns.tolist(),
             'returns_df': metrics_res['returns_df'],
             'max_sharpe_portfolio': max_sharpe_dict,
             'min_variance_portfolio': min_var_dict,
+            'target_portfolio': target_port_dict,
             'efficient_frontier': {
                 'target_returns': target_returns.tolist(),
                 'volatilities': efficient_volatilities,
@@ -209,5 +246,6 @@ class QuantAnalystAgent:
                 'sharpe_ratios': mc_sharpe.tolist()
             },
             'correlation_matrix': corr_matrix.to_dict(),
-            'risk_free_rate': self.risk_free_rate
+            'risk_free_rate': self.risk_free_rate,
+            'return_multiplier': return_multiplier
         }
