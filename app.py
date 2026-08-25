@@ -17,6 +17,29 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# Global Plotly Mobile-Lock Configuration (Disables touch-zoom hijacking & toolbar overlap)
+PLOTLY_CONFIG = {
+    'displayModeBar': False,          # Hides floating toolbar completely
+    'scrollZoom': False,              # Disables scroll/pinch zooming
+    'showAxisDragHandles': False,     # Disables dragging on axes
+    'showAxisRangeEntryBoxes': False, # Disables range entry boxes
+    'modeBarButtonsToRemove': ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
+}
+
+def lock_chart_for_mobile(fig):
+    """
+    Locks axes and drag modes so touching on mobile scrolls the page naturally
+    without distorting chart axes or hijacking finger gestures.
+    """
+    fig.update_layout(
+        dragmode=False,
+        margin=dict(l=10, r=10, t=40, b=20),
+        hovermode="closest"
+    )
+    fig.update_xaxes(fixedrange=True)
+    fig.update_yaxes(fixedrange=True)
+    return fig
+
 # Custom Styling (Mobile-Responsive & Modern Dark Aesthetic)
 st.markdown("""
 <style>
@@ -255,8 +278,8 @@ def main():
                 color=[v*100 for v in roe_vals],
                 color_continuous_scale="Viridis"
             )
-            fig_roe.update_layout(margin=dict(l=10, r=10, t=40, b=20))
-            st.plotly_chart(fig_roe, use_container_width=True)
+            fig_roe = lock_chart_for_mobile(fig_roe)
+            st.plotly_chart(fig_roe, use_container_width=True, config=PLOTLY_CONFIG)
 
         with c2:
             de_vals = [fundamental_res.get(t, {}).get('debt_to_equity', 0) or 0 for t in tickers]
@@ -267,8 +290,8 @@ def main():
                 color=de_vals,
                 color_continuous_scale="Reds"
             )
-            fig_de.update_layout(margin=dict(l=10, r=10, t=40, b=20))
-            st.plotly_chart(fig_de, use_container_width=True)
+            fig_de = lock_chart_for_mobile(fig_de)
+            st.plotly_chart(fig_de, use_container_width=True, config=PLOTLY_CONFIG)
 
         st.markdown("---")
         st.subheader("Financial Statement Deep Dive")
@@ -306,8 +329,8 @@ def main():
             title="Rebased Asset Growth (Initial $100 Baseline)",
             labels={'value': 'Rebased Price ($)', 'variable': 'Ticker', 'Date': 'Date'}
         )
-        fig_price.update_layout(hovermode="x unified", margin=dict(l=10, r=10, t=40, b=20))
-        st.plotly_chart(fig_price, use_container_width=True)
+        fig_price = lock_chart_for_mobile(fig_price)
+        st.plotly_chart(fig_price, use_container_width=True, config=PLOTLY_CONFIG)
 
         # Risk Metrics Summary Table (with VaR and CVaR)
         asset_m = quant_res['asset_metrics']
@@ -342,8 +365,8 @@ def main():
                 title="Historical Drawdowns (% from Peak)",
                 labels={'value': 'Drawdown (%)', 'variable': 'Ticker', 'Date': 'Date'}
             )
-            fig_dd.update_layout(margin=dict(l=10, r=10, t=40, b=20))
-            st.plotly_chart(fig_dd, use_container_width=True)
+            fig_dd = lock_chart_for_mobile(fig_dd)
+            st.plotly_chart(fig_dd, use_container_width=True, config=PLOTLY_CONFIG)
 
         # Correlation Heatmap
         st.markdown("### Cross-Asset Return Correlation Matrix")
@@ -355,8 +378,8 @@ def main():
             color_continuous_scale="RdBu_r",
             title="Cross-Asset Daily Return Correlations"
         )
-        fig_corr.update_layout(margin=dict(l=10, r=10, t=40, b=20))
-        st.plotly_chart(fig_corr, use_container_width=True)
+        fig_corr = lock_chart_for_mobile(fig_corr)
+        st.plotly_chart(fig_corr, use_container_width=True, config=PLOTLY_CONFIG)
 
     # ----------------------------------------------------
     # TAB 3: PREDICTIVE ML RETURN FORECASTING (AGENT 4)
@@ -412,8 +435,8 @@ def main():
                 color=pred_20d,
                 color_continuous_scale="Viridis"
             )
-            fig_ml_bar.update_layout(margin=dict(l=10, r=10, t=40, b=20))
-            st.plotly_chart(fig_ml_bar, use_container_width=True)
+            fig_ml_bar = lock_chart_for_mobile(fig_ml_bar)
+            st.plotly_chart(fig_ml_bar, use_container_width=True, config=PLOTLY_CONFIG)
 
         with col_ml2:
             st.markdown("### 🌲 Feature Importance Breakdown")
@@ -426,8 +449,8 @@ def main():
                     title=f"Random Forest Feature Importance for {sel_ml_ticker}",
                     color='Importance', color_continuous_scale="Blues"
                 )
-                fig_fi.update_layout(margin=dict(l=10, r=10, t=40, b=20))
-                st.plotly_chart(fig_fi, use_container_width=True)
+                fig_fi = lock_chart_for_mobile(fig_fi)
+                st.plotly_chart(fig_fi, use_container_width=True, config=PLOTLY_CONFIG)
 
     # ----------------------------------------------------
     # TAB 4: PORTFOLIO OPTIMIZATION & VaR
@@ -441,7 +464,7 @@ def main():
         mc = quant_res['monte_carlo']
         ef = quant_res['efficient_frontier']
 
-        # Highlight Metric Cards (Auto-wraps gracefully on mobile)
+        # Highlight Metric Cards
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
             st.metric("Max Sharpe Expected Return", f"{max_sharpe['expected_return']*100:.2f}%")
@@ -527,8 +550,8 @@ def main():
             margin=dict(l=10, r=10, t=40, b=20),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
-
-        st.plotly_chart(fig_ef, use_container_width=True)
+        fig_ef = lock_chart_for_mobile(fig_ef)
+        st.plotly_chart(fig_ef, use_container_width=True, config=PLOTLY_CONFIG)
 
         # Optimal Allocations Pie Charts
         st.markdown("### Optimal Portfolio Allocation Breakdown")
@@ -542,8 +565,8 @@ def main():
                 title=f"Max Sharpe Allocation (Sharpe = {max_sharpe['sharpe_ratio']:.2f})",
                 hole=0.4
             )
-            fig_ms_pie.update_layout(margin=dict(l=10, r=10, t=40, b=20))
-            st.plotly_chart(fig_ms_pie, use_container_width=True)
+            fig_ms_pie = lock_chart_for_mobile(fig_ms_pie)
+            st.plotly_chart(fig_ms_pie, use_container_width=True, config=PLOTLY_CONFIG)
 
         with col_p2:
             mv_w = min_var['weights']
@@ -553,8 +576,8 @@ def main():
                 title=f"Minimum Variance Allocation (Vol = {min_var['volatility']*100:.2f}%)",
                 hole=0.4
             )
-            fig_mv_pie.update_layout(margin=dict(l=10, r=10, t=40, b=20))
-            st.plotly_chart(fig_mv_pie, use_container_width=True)
+            fig_mv_pie = lock_chart_for_mobile(fig_mv_pie)
+            st.plotly_chart(fig_mv_pie, use_container_width=True, config=PLOTLY_CONFIG)
 
         # Allocation Weights Table
         alloc_df = pd.DataFrame({
