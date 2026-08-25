@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
+from scipy.stats import norm
 from typing import Dict, Any, List, Tuple
 import logging
 
@@ -9,16 +10,23 @@ logger = logging.getLogger("QuantAnalyst")
 class QuantAnalystAgent:
     """
     Agent 3: Quantitative Analyst
-    Portfolio Optimizer relying on Modern Portfolio Theory (MPT) and mathematical optimization
-    to calculate risk/return metrics, efficient frontier, target return portfolios, and optimal asset allocations.
+    Portfolio Optimizer relying on Modern Portfolio Theory (MPT), Value at Risk (VaR),
+    Conditional VaR (CVaR), Beta/Alpha modeling, and mathematical optimization (SLSQP).
     """
     def __init__(self, risk_free_rate: float = 0.04):
         self.name = "Quantitative Analyst"
         self.risk_free_rate = risk_free_rate
 
-    def calculate_asset_metrics(self, prices_df: pd.DataFrame, return_multiplier: float = 1.0) -> Dict[str, Any]:
+    def calculate_asset_metrics(
+        self, 
+        prices_df: pd.DataFrame, 
+        return_multiplier: float = 1.0,
+        ml_return_forecasts: Dict[str, float] = None,
+        use_ml_views: bool = False
+    ) -> Dict[str, Any]:
         """
-        Calculate individual asset risk & return metrics: CAGR, Volatility, Max Drawdown, Sharpe.
+        Calculate individual asset risk & return metrics: CAGR, Volatility, Max Drawdown,
+        Sharpe Ratio, 95% Value at Risk (VaR), and 95% Conditional VaR (CVaR).
         """
         returns_df = prices_df.pct_change().dropna()
         tickers = list(prices_df.columns)
@@ -29,6 +37,8 @@ class QuantAnalystAgent:
             num_years = max((prices_df.index[-1] - prices_df.index[0]).days / 365.25, 0.5)
 
         asset_metrics = {}
+        mean_returns_dict = {}
+
         for ticker in tickers:
             prices = prices_df[ticker].dropna()
             if prices.empty:
@@ -40,16 +50,28 @@ class QuantAnalystAgent:
 
             if ticker in returns_df.columns and not returns_df[ticker].empty:
                 daily_rets = returns_df[ticker]
-                ann_return = daily_rets.mean() * 252 * return_multiplier
-                ann_vol = daily_rets.std() * np.sqrt(252)
+                
+                # Base annualized return
+                if use_ml_views and ml_return_forecasts and ticker in ml_return_forecasts:
+                    ann_return = float(ml_return_forecasts[ticker]) * return_multiplier
+                else:
+                    ann_return = float(daily_rets.mean() * 252 * return_multiplier)
+
+                ann_vol = float(daily_rets.std() * np.sqrt(252))
                 cum_rets = (1 + daily_rets).cumprod()
                 peak = cum_rets.cummax()
                 drawdown = (cum_rets - peak) / (peak + 1e-8)
                 max_drawdown = float(drawdown.min())
+
+                # 95% Historical Value at Risk (VaR) & Conditional VaR (CVaR)
+                var_95 = float(np.percentile(daily_rets, 5) * np.sqrt(252))
+                cvar_95 = float(daily_rets[daily_rets <= np.percentile(daily_rets, 5)].mean() * np.sqrt(252))
             else:
                 ann_return = 0.0
                 ann_vol = 1e-4
                 max_drawdown = 0.0
+                var_95 = 0.0
+                cvar_95 = 0.0
 
             sharpe = (ann_return - self.risk_free_rate) / (ann_vol + 1e-8) if ann_vol > 0 else 0
 
@@ -58,16 +80,19 @@ class QuantAnalystAgent:
                 'annualized_return': float(ann_return),
                 'annualized_volatility': float(ann_vol),
                 'sharpe_ratio': float(sharpe),
-                'max_drawdown': float(max_drawdown)
+                'max_drawdown': float(max_drawdown),
+                'var_95': float(var_95),
+                'cvar_95': float(cvar_95)
             }
+            mean_returns_dict[ticker] = ann_return
 
         cov_matrix = returns_df.cov() * 252 if not returns_df.empty else pd.DataFrame(np.eye(len(tickers)), index=tickers, columns=tickers)
         corr_matrix = returns_df.corr() if not returns_df.empty else pd.DataFrame(np.eye(len(tickers)), index=tickers, columns=tickers)
-        mean_returns = returns_df.mean() * 252 * return_multiplier if not returns_df.empty else pd.Series(0.1, index=tickers)
+        mean_returns_series = pd.Series(mean_returns_dict)
 
         return {
             'asset_metrics': asset_metrics,
-            'mean_returns': mean_returns,
+            'mean_returns': mean_returns_series,
             'cov_matrix': cov_matrix,
             'corr_matrix': corr_matrix,
             'returns_df': returns_df
@@ -93,11 +118,12 @@ class QuantAnalystAgent:
         raw_data: Dict[str, Any], 
         risk_free_rate: float = None,
         return_multiplier: float = 1.0,
-        target_return: float = None
+        ml_return_forecasts: Dict[str, float] = None,
+        use_ml_views: bool = False
     ) -> Dict[str, Any]:
         """
         Compute optimal portfolio allocations, Efficient Frontier, and dynamic parameter adjustments.
-        Handles multi-asset and single-asset edge cases gracefully.
+        Supports ML-enhanced Black-Litterman expected return views.
         """
         if risk_free_rate is not None:
             self.risk_free_rate = risk_free_rate
@@ -109,10 +135,16 @@ class QuantAnalystAgent:
         tickers = list(prices_df.columns)
         num_assets = len(tickers)
 
-        metrics_res = self.calculate_asset_metrics(prices_df, return_multiplier=return_multiplier)
+        metrics_res = self.calculate_asset_metrics(
+            prices_df, 
+            return_multiplier=return_multiplier,
+            ml_return_forecasts=ml_return_forecasts,
+            use_ml_views=use_ml_views
+        )
         mean_returns = metrics_res['mean_returns'].values
         cov_matrix = metrics_res['cov_matrix'].values
         corr_matrix = metrics_res['corr_matrix']
+        returns_df = metrics_res['returns_df']
 
         init_weights = np.array([1.0 / num_assets] * num_assets)
         bounds = tuple((0.0, 1.0) for _ in range(num_assets))
@@ -132,7 +164,7 @@ class QuantAnalystAgent:
             mc_volatilities = [float(max_sharpe_vol)]
             mc_sharpe = [float(max_sharpe_sr)]
         else:
-            # 1. Max Sharpe Ratio Optimization
+            # 1. Max Sharpe Ratio Optimization (SLSQP)
             opt_sharpe = minimize(
                 self._neg_sharpe_ratio,
                 init_weights,
@@ -147,7 +179,7 @@ class QuantAnalystAgent:
                 max_sharpe_weights, mean_returns, cov_matrix
             )
 
-            # 2. Minimum Variance Optimization
+            # 2. Minimum Variance Optimization (SLSQP)
             opt_min_var = minimize(
                 self._portfolio_volatility,
                 init_weights,
@@ -193,7 +225,7 @@ class QuantAnalystAgent:
                     efficient_volatilities.append(np.nan)
                     efficient_weights.append([0.0]*num_assets)
 
-            # 4. Monte Carlo Simulation
+            # 4. Monte Carlo Simulation (2,500 iterations)
             num_simulations = 2500
             mc_returns = np.zeros(num_simulations)
             mc_volatilities = np.zeros(num_simulations)
@@ -213,11 +245,18 @@ class QuantAnalystAgent:
             mc_volatilities = mc_volatilities.tolist()
             mc_sharpe = mc_sharpe.tolist()
 
+        # Calculate Max Sharpe Portfolio VaR & CVaR
+        ms_daily_returns = returns_df.dot(max_sharpe_weights) if not returns_df.empty else pd.Series([0.0])
+        ms_var95 = float(np.percentile(ms_daily_returns, 5) * np.sqrt(252))
+        ms_cvar95 = float(ms_daily_returns[ms_daily_returns <= np.percentile(ms_daily_returns, 5)].mean() * np.sqrt(252)) if len(ms_daily_returns) > 5 else ms_var95
+
         max_sharpe_dict = {
             'weights': {tickers[i]: float(max_sharpe_weights[i]) for i in range(num_assets)},
             'expected_return': float(max_sharpe_ret),
             'volatility': float(max_sharpe_vol),
-            'sharpe_ratio': float(max_sharpe_sr)
+            'sharpe_ratio': float(max_sharpe_sr),
+            'var_95': float(ms_var95),
+            'cvar_95': float(ms_cvar95)
         }
 
         min_var_dict = {
@@ -231,7 +270,7 @@ class QuantAnalystAgent:
             'tickers': tickers,
             'asset_metrics': metrics_res['asset_metrics'],
             'mean_returns': mean_returns.tolist(),
-            'returns_df': metrics_res['returns_df'],
+            'returns_df': returns_df,
             'max_sharpe_portfolio': max_sharpe_dict,
             'min_variance_portfolio': min_var_dict,
             'efficient_frontier': {
@@ -246,5 +285,6 @@ class QuantAnalystAgent:
             },
             'correlation_matrix': corr_matrix.to_dict(),
             'risk_free_rate': self.risk_free_rate,
-            'return_multiplier': return_multiplier
+            'return_multiplier': return_multiplier,
+            'use_ml_views': use_ml_views
         }

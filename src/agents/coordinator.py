@@ -35,11 +35,11 @@ class AgentSystemCoordinator:
         end_date: str = None,
         risk_free_rate: float = 0.04,
         return_multiplier: float = 1.0,
-        target_return: float = None,
+        use_ml_views: bool = False,
         gemini_api_key: str = None
     ) -> Dict[str, Any]:
         """
-        Execute full multi-agent workflow with dynamic expected return and risk-free rate parameters.
+        Execute full multi-agent workflow with dynamic expected return, risk-free rate, and ML return views.
         """
         if gemini_api_key:
             self.ai_analyst.api_key = gemini_api_key
@@ -52,13 +52,15 @@ class AgentSystemCoordinator:
 
         logger.info("Step 3: Predictive ML Analyst training Random Forest regressor & forecasting returns...")
         ml_output = self.ml_analyst.predict(raw_data)
+        ml_forecasts = ml_output.get('predicted_annualized_returns', {})
 
-        logger.info(f"Step 4: Quantitative Analyst optimizing portfolio with rf={risk_free_rate}, multiplier={return_multiplier}...")
+        logger.info(f"Step 4: Quantitative Analyst optimizing portfolio (ML views={use_ml_views}, rf={risk_free_rate}, multiplier={return_multiplier})...")
         quant_output = self.quant_analyst.optimize_portfolio(
             raw_data, 
             risk_free_rate=risk_free_rate, 
             return_multiplier=return_multiplier,
-            target_return=target_return
+            ml_return_forecasts=ml_forecasts,
+            use_ml_views=use_ml_views
         )
 
         logger.info("Step 5: Compiling analytics data bundle...")

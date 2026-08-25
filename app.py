@@ -70,9 +70,9 @@ st.markdown("""
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplier, gemini_key):
+def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplier, use_ml_views, gemini_key):
     """
-    Cached helper to execute multi-agent coordinator pipeline with dynamic expected return parameters.
+    Cached helper to execute multi-agent coordinator pipeline.
     """
     coordinator = AgentSystemCoordinator(gemini_api_key=gemini_key)
     return coordinator.run_pipeline(
@@ -81,6 +81,7 @@ def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplie
         end_date=end_str,
         risk_free_rate=rf_rate,
         return_multiplier=ret_multiplier,
+        use_ml_views=use_ml_views,
         gemini_api_key=gemini_key
     )
 
@@ -116,7 +117,7 @@ def main():
         end_date = st.date_input("End Date", datetime.date.today())
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📊 Return & Risk Parameters")
+    st.sidebar.markdown("### 📊 Quantitative & ML Settings")
     
     # Risk-free rate
     rf_rate_pct = st.sidebar.slider("Risk-Free Rate ($R_f$ %)", min_value=0.0, max_value=12.0, value=4.0, step=0.25)
@@ -124,8 +125,12 @@ def main():
 
     # Expected Return Adjustment Slider
     return_shift_pct = st.sidebar.slider("Expected Return Adjustment (%)", min_value=-50, max_value=100, value=0, step=5,
-                                        help="Scale expected future asset returns (e.g. +20% Bullish or -20% Bearish outlook). Affects all MPT allocations, Efficient Frontier curves, and Sharpe ratios.")
+                                        help="Scale expected future asset returns. Affects all MPT allocations, Efficient Frontier curves, and Sharpe ratios.")
     ret_multiplier = 1.0 + (return_shift_pct / 100.0)
+
+    # ML-Enhanced Return Views Toggle
+    use_ml_views = st.sidebar.checkbox("🤖 Use Random Forest ML Views in MPT", value=False,
+                                       help="Replaces static historical returns with Supervised ML forward return forecasts inside the Modern Portfolio Theory (MPT) optimizer.")
 
     # Optional Gemini API Key
     st.sidebar.markdown("---")
@@ -137,9 +142,9 @@ def main():
     st.sidebar.markdown("""
     - **Agent 1: Data Architect**: Ingests prices & statements.
     - **Agent 2: Fundamental Analyst**: Computes D/E, ROE, FCF Yield.
-    - **Agent 3: Quantitative Analyst**: MPT Optimization & Efficient Frontier.
-    - **Agent 4: Predictive ML Analyst**: Random Forest return forecasts & feature inputs.
-    - **Agent 5: Gemini AI Summarizer**: Wall Street Investment Memos (Optional).
+    - **Agent 3: Quantitative Analyst**: MPT, VaR/CVaR & Efficient Frontier.
+    - **Agent 4: Predictive ML Analyst**: Random Forest return forecasts.
+    - **Agent 5: Gemini AI Summarizer**: Wall Street Investment Memos.
     - **Agent 6: Dashboard Developer**: Streamlit & Plotly UI.
     """)
 
@@ -153,7 +158,7 @@ def main():
     with col_h2:
         st.markdown('<div class="main-header">Financial Statement & Portfolio Analytics Engine</div>', unsafe_allow_html=True)
     
-    st.markdown('<div class="sub-header">Multi-Agent Machine Learning & Quantitative Modern Portfolio Theory (MPT) Optimization Platform</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Multi-Agent Machine Learning, Risk Analytics (VaR/CVaR) & Modern Portfolio Theory (MPT) Platform</div>', unsafe_allow_html=True)
 
     # Pipeline Agent Badge Indicator
     st.markdown("""
@@ -181,6 +186,7 @@ def main():
                 end_str=end_date.strftime("%Y-%m-%d"),
                 rf_rate=rf_rate,
                 ret_multiplier=ret_multiplier,
+                use_ml_views=use_ml_views,
                 gemini_key=gemini_key
             )
         except Exception as e:
@@ -199,9 +205,9 @@ def main():
     # Tabs Navigation
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "🏢 Fundamental Health",
-        "📊 Historical Performance",
+        "📊 Historical Performance & Risk",
         "🤖 ML Return Forecasting",
-        "🎯 Portfolio Optimization",
+        "🎯 Portfolio Optimization & VaR",
         "📝 Gemini AI Report"
     ])
 
@@ -285,11 +291,11 @@ def main():
                 st.info(f"No statement data available for {selected_stmt_ticker}.")
 
     # ----------------------------------------------------
-    # TAB 2: HISTORICAL PERFORMANCE
+    # TAB 2: HISTORICAL PERFORMANCE & RISK
     # ----------------------------------------------------
     with tab2:
-        st.subheader("Historical Stock Performance & Risk Metrics")
-        st.markdown(f"Ingested by **Agent 1 (Data Architect)** and processed by **Agent 3 (Quant Analyst)** (Expected Return Scale: **{ret_multiplier:.2f}x**).")
+        st.subheader("Historical Stock Performance & Institutional Risk Metrics")
+        st.markdown(f"Ingested by **Agent 1 (Data Architect)** and processed by **Agent 3 (Quant Analyst)** (Optimization Mode: **{'🤖 ML Expected Returns' if use_ml_views else '📊 Historical Mean Returns'}**).")
 
         # Rebased Cumulative Returns Plot
         normalized_prices = (prices_df / prices_df.iloc[0]) * 100
@@ -303,7 +309,7 @@ def main():
         fig_price.update_layout(hovermode="x unified", margin=dict(l=10, r=10, t=40, b=20))
         st.plotly_chart(fig_price, use_container_width=True)
 
-        # Risk Metrics Summary Table
+        # Risk Metrics Summary Table (with VaR and CVaR)
         asset_m = quant_res['asset_metrics']
         risk_table_data = []
         for t in tickers:
@@ -311,14 +317,33 @@ def main():
             risk_table_data.append({
                 "Ticker": t,
                 "CAGR": f"{am.get('cagr', 0)*100:.2f}%",
-                "Expected Annualized Return": f"{am.get('annualized_return', 0)*100:.2f}%",
+                "Expected Return": f"{am.get('annualized_return', 0)*100:.2f}%",
                 "Annualized Volatility": f"{am.get('annualized_volatility', 0)*100:.2f}%",
-                f"Sharpe Ratio (Rf={rf_rate_pct:.1f}%)": f"{am.get('sharpe_ratio', 0):.2f}",
-                "Max Drawdown": f"{am.get('max_drawdown', 0)*100:.2f}%"
+                "Sharpe Ratio": f"{am.get('sharpe_ratio', 0):.2f}",
+                "Max Drawdown": f"{am.get('max_drawdown', 0)*100:.2f}%",
+                "95% VaR (Ann.)": f"{am.get('var_95', 0)*100:.2f}%",
+                "95% CVaR / Expected Shortfall": f"{am.get('cvar_95', 0)*100:.2f}%"
             })
 
-        st.markdown("### Individual Asset Risk & Return Summary")
+        st.markdown("### Institutional Risk & Return Summary Table")
         st.dataframe(pd.DataFrame(risk_table_data), use_container_width=True, hide_index=True)
+
+        # Drawdown Underwater Plot
+        st.markdown("### Historical Drawdown (Underwater Chart)")
+        returns_df = quant_res['returns_df']
+        if not returns_df.empty:
+            cum_returns = (1 + returns_df).cumprod()
+            peak = cum_returns.cummax()
+            drawdowns = (cum_returns - peak) / peak
+            fig_dd = px.line(
+                drawdowns * 100,
+                x=drawdowns.index,
+                y=drawdowns.columns,
+                title="Historical Drawdowns (% from Peak)",
+                labels={'value': 'Drawdown (%)', 'variable': 'Ticker', 'Date': 'Date'}
+            )
+            fig_dd.update_layout(margin=dict(l=10, r=10, t=40, b=20))
+            st.plotly_chart(fig_dd, use_container_width=True)
 
         # Correlation Heatmap
         st.markdown("### Cross-Asset Return Correlation Matrix")
@@ -405,18 +430,18 @@ def main():
                 st.plotly_chart(fig_fi, use_container_width=True)
 
     # ----------------------------------------------------
-    # TAB 4: PORTFOLIO OPTIMIZATION
+    # TAB 4: PORTFOLIO OPTIMIZATION & VaR
     # ----------------------------------------------------
     with tab4:
-        st.subheader("Modern Portfolio Theory (MPT) Optimization")
-        st.markdown(f"Calculated by **Agent 3 (Quantitative Analyst)** under **Risk-Free Rate = {rf_rate_pct:.2f}%** and **Return Multiplier = {ret_multiplier:.2f}x**.")
+        st.subheader("Modern Portfolio Theory (MPT) & Tail Risk Optimization")
+        st.markdown(f"Calculated by **Agent 3 (Quantitative Analyst)** under **$R_f$ = {rf_rate_pct:.2f}%** and **Return Mode = {'🤖 Random Forest ML Forecasts' if use_ml_views else '📊 Empirical Historical Returns'}**.")
 
         max_sharpe = quant_res['max_sharpe_portfolio']
         min_var = quant_res['min_variance_portfolio']
         mc = quant_res['monte_carlo']
         ef = quant_res['efficient_frontier']
 
-        # Highlight Metric Cards
+        # Highlight Metric Cards (Auto-wraps gracefully on mobile)
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
             st.metric("Max Sharpe Expected Return", f"{max_sharpe['expected_return']*100:.2f}%")
@@ -425,12 +450,12 @@ def main():
         with col_m3:
             st.metric("Max Sharpe Ratio", f"{max_sharpe['sharpe_ratio']:.2f}")
         with col_m4:
-            st.metric("Min Volatility", f"{min_var['volatility']*100:.2f}%")
+            st.metric("Portfolio 95% VaR (Ann.)", f"{max_sharpe.get('var_95', 0)*100:.2f}%")
 
         st.markdown("---")
 
-        # Efficient Frontier Plotly Scatter Plot
-        st.markdown("### Interactive Efficient Frontier Scatter Plot")
+        # Efficient Frontier Plotly Scatter Plot with Capital Allocation Line (CAL)
+        st.markdown("### Interactive Efficient Frontier & Capital Allocation Line (CAL)")
 
         fig_ef = go.Figure()
 
@@ -443,7 +468,7 @@ def main():
                 size=5,
                 color=mc['sharpe_ratios'],
                 colorscale='Viridis',
-                colorbar=dict(title=f"Sharpe (Rf={rf_rate_pct:.1f}%)"),
+                colorbar=dict(title=f"Sharpe"),
                 showscale=True
             ),
             name="Simulated Portfolios",
@@ -462,6 +487,18 @@ def main():
             line=dict(color='orange', width=3, dash='dash'),
             name="Efficient Frontier"
         ))
+
+        # Capital Allocation Line (CAL) from Rf to Max Sharpe
+        if max_sharpe['volatility'] > 0:
+            cal_x = [0.0, max_sharpe['volatility'] * 150]
+            cal_y = [rf_rate * 100, (rf_rate + 1.5 * (max_sharpe['expected_return'] - rf_rate)) * 100]
+            fig_ef.add_trace(go.Scatter(
+                x=cal_x,
+                y=cal_y,
+                mode='lines',
+                line=dict(color='rgba(0, 230, 118, 0.7)', width=2, dash='dot'),
+                name="Capital Allocation Line (CAL)"
+            ))
 
         # Highlight Max Sharpe Portfolio
         fig_ef.add_trace(go.Scatter(
@@ -485,7 +522,7 @@ def main():
 
         fig_ef.update_layout(
             xaxis_title="Annualized Volatility (%)",
-            yaxis_title=f"Annualized Expected Return (%) [Scale: {ret_multiplier:.2f}x]",
+            yaxis_title="Annualized Expected Return (%)",
             hovermode="closest",
             margin=dict(l=10, r=10, t=40, b=20),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
@@ -546,10 +583,9 @@ def main():
         if abs(total_w - 100.0) > 0.1:
             st.warning(f"Total Portfolio Weight is **{total_w:.1f}%**. Please adjust sliders to equal exactly 100.0%.")
         else:
-            # Calculate custom portfolio metrics with updated return multiplier and risk-free rate
             w_vec = np.array([user_weights[t] / 100.0 for t in tickers])
             ret_series = quant_res['returns_df']
-            mean_rets = ret_series.mean() * 252 * ret_multiplier
+            mean_rets = np.array(quant_res['mean_returns'])
             cov_mat = ret_series.cov() * 252
 
             custom_ret = np.sum(mean_rets * w_vec)
@@ -570,6 +606,7 @@ def main():
             "tickers": tickers,
             "risk_free_rate": rf_rate,
             "return_multiplier": ret_multiplier,
+            "use_ml_views": use_ml_views,
             "max_sharpe_weights": max_sharpe['weights'],
             "min_variance_weights": min_var['weights'],
             "user_custom_weights": user_weights if abs(total_w - 100.0) <= 0.1 else "Invalid"
