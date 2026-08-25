@@ -78,6 +78,8 @@ class MLPredictiveAnalystAgent:
         tickers = list(prices_df.columns)
         statements = raw_data.get('statements', {})
         ml_results = {}
+        predicted_annualized_returns = {}
+        feature_importances = {}
         latest_features_summary = {}
 
         feature_cols = ['return_1d', 'return_5d', 'momentum_20d', 'momentum_50d', 'volatility_20d', 'rsi_14', 'sma_ratio', 'volume_trend']
@@ -87,7 +89,6 @@ class MLPredictiveAnalystAgent:
             if len(prices) < 100:
                 continue
 
-            # Extract volume series if available in statements/info
             volume_series = None
             if ticker in statements:
                 info = statements[ticker].get('info', {})
@@ -152,9 +153,13 @@ class MLPredictiveAnalystAgent:
                 'latest_features': latest_features_summary[ticker],
                 'feature_importances': importances
             }
+            predicted_annualized_returns[ticker] = predicted_ann_ret
+            feature_importances[ticker] = importances
 
         return {
             'ml_results': ml_results,
+            'predicted_annualized_returns': predicted_annualized_returns,
+            'feature_importances': feature_importances,
             'latest_features': latest_features_summary,
             'model_used': "Random Forest Regressor" if self.model_type == "random_forest" else "Ridge Regressor"
         }
