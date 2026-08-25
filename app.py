@@ -9,37 +9,39 @@ import os
 
 from src.agents.coordinator import AgentSystemCoordinator
 
-# Page Configuration
+# Page Configuration - Responsive & Mobile-Ready
 st.set_page_config(
-    page_title="Financial Statement & Portfolio Optimization Dashboard",
+    page_title="Financial Statement & Portfolio Analytics Engine",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# Custom Styling (Dark / Modern Aesthetic)
+# Custom Styling (Mobile-Responsive & Modern Dark Aesthetic)
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.2rem;
+        font-size: 2.1rem;
         font-weight: 700;
         background: linear-gradient(90deg, #1E88E5 0%, #00E676 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.4rem;
+        line-height: 1.2;
     }
     .sub-header {
         color: #A0AEC0;
-        font-size: 1.05rem;
-        margin-bottom: 1.5rem;
+        font-size: 1rem;
+        margin-bottom: 1.2rem;
+        line-height: 1.4;
     }
     .agent-pill {
         display: inline-block;
-        padding: 0.25rem 0.65rem;
-        border-radius: 15px;
-        font-size: 0.8rem;
+        padding: 0.25rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
         font-weight: 600;
-        margin-right: 0.4rem;
+        margin-right: 0.3rem;
         margin-bottom: 0.4rem;
     }
     .pill-data { background-color: #2B6CB0; color: white; }
@@ -48,6 +50,22 @@ st.markdown("""
     .pill-ml { background-color: #D69E2E; color: black; }
     .pill-ai { background-color: #E53E3E; color: white; }
     .pill-dev { background-color: #DD6B20; color: white; }
+
+    /* Mobile Screen Responsiveness */
+    @media (max-width: 768px) {
+        .main-header {
+            font-size: 1.4rem !important;
+        }
+        .sub-header {
+            font-size: 0.85rem !important;
+            margin-bottom: 0.8rem !important;
+        }
+        .agent-pill {
+            font-size: 0.65rem !important;
+            padding: 0.2rem 0.45rem !important;
+            margin-bottom: 0.3rem !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -101,8 +119,8 @@ def main():
 
     # Optional Gemini API Key
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🔑 Gemini AI Integration")
-    gemini_key = st.sidebar.text_input("Gemini API Key (Optional)", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
+    st.sidebar.markdown("### 🔑 Gemini AI Integration (Optional)")
+    gemini_key = st.sidebar.text_input("Gemini API Key", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🤖 Multi-Agent Architecture")
@@ -111,15 +129,15 @@ def main():
     - **Agent 2: Fundamental Analyst**: Computes D/E, ROE, FCF Yield.
     - **Agent 3: Quantitative Analyst**: MPT Optimization & Efficient Frontier.
     - **Agent 4: Predictive ML Analyst**: Random Forest return forecasts & feature inputs.
-    - **Agent 5: Gemini AI Summarizer**: Synthesizes Wall Street Investment Memos.
+    - **Agent 5: Gemini AI Summarizer**: Wall Street Investment Memos (Optional).
     - **Agent 6: Dashboard Developer**: Streamlit & Plotly UI.
     """)
 
     st.sidebar.button("🚀 Run Agent Pipeline", type="primary", use_container_width=True)
 
     # App Header
-    st.markdown('<div class="main-header">Financial Statement & Portfolio Optimization Dashboard</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Multi-Agent AI & Machine Learning Pipeline for Fundamental Valuation, Return Forecasting & Modern Portfolio Theory (MPT)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Financial Statement & Portfolio Analytics Engine</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Multi-Agent Machine Learning & Quantitative Modern Portfolio Theory (MPT) Optimization Platform</div>', unsafe_allow_html=True)
 
     # Pipeline Agent Badge Indicator
     st.markdown("""
@@ -163,11 +181,11 @@ def main():
 
     # Tabs Navigation
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🏢 Fundamental Health (Agent 2)",
+        "🏢 Fundamental Health",
         "📊 Historical Performance",
-        "🤖 ML Return Forecasting (Agent 4)",
-        "🎯 Portfolio Optimization (Agent 3)",
-        "📝 Gemini AI Executive Report (Agent 5)"
+        "🤖 ML Return Forecasting",
+        "🎯 Portfolio Optimization",
+        "📝 Gemini AI Report"
     ])
 
     # ----------------------------------------------------
@@ -214,6 +232,7 @@ def main():
                 color=[v*100 for v in roe_vals],
                 color_continuous_scale="Viridis"
             )
+            fig_roe.update_layout(margin=dict(l=10, r=10, t=40, b=20))
             st.plotly_chart(fig_roe, use_container_width=True)
 
         with c2:
@@ -225,6 +244,7 @@ def main():
                 color=de_vals,
                 color_continuous_scale="Reds"
             )
+            fig_de.update_layout(margin=dict(l=10, r=10, t=40, b=20))
             st.plotly_chart(fig_de, use_container_width=True)
 
         st.markdown("---")
@@ -263,7 +283,7 @@ def main():
             title="Rebased Asset Growth (Initial $100 Baseline)",
             labels={'value': 'Rebased Price ($)', 'variable': 'Ticker', 'Date': 'Date'}
         )
-        fig_price.update_layout(hovermode="x unified")
+        fig_price.update_layout(hovermode="x unified", margin=dict(l=10, r=10, t=40, b=20))
         st.plotly_chart(fig_price, use_container_width=True)
 
         # Risk Metrics Summary Table
@@ -293,6 +313,7 @@ def main():
             color_continuous_scale="RdBu_r",
             title="Cross-Asset Daily Return Correlations"
         )
+        fig_corr.update_layout(margin=dict(l=10, r=10, t=40, b=20))
         st.plotly_chart(fig_corr, use_container_width=True)
 
     # ----------------------------------------------------
@@ -349,6 +370,7 @@ def main():
                 color=pred_20d,
                 color_continuous_scale="Viridis"
             )
+            fig_ml_bar.update_layout(margin=dict(l=10, r=10, t=40, b=20))
             st.plotly_chart(fig_ml_bar, use_container_width=True)
 
         with col_ml2:
@@ -362,6 +384,7 @@ def main():
                     title=f"Random Forest Feature Importance for {sel_ml_ticker}",
                     color='Importance', color_continuous_scale="Blues"
                 )
+                fig_fi.update_layout(margin=dict(l=10, r=10, t=40, b=20))
                 st.plotly_chart(fig_fi, use_container_width=True)
 
     # ----------------------------------------------------
@@ -376,7 +399,7 @@ def main():
         mc = quant_res['monte_carlo']
         ef = quant_res['efficient_frontier']
 
-        # Highlight Metric Cards
+        # Highlight Metric Cards (Auto-wraps gracefully on mobile)
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
             st.metric("Max Sharpe Return", f"{max_sharpe['expected_return']*100:.2f}%")
@@ -403,7 +426,7 @@ def main():
                 size=5,
                 color=mc['sharpe_ratios'],
                 colorscale='Viridis',
-                colorbar=dict(title="Sharpe Ratio"),
+                colorbar=dict(title="Sharpe"),
                 showscale=True
             ),
             name="Simulated Portfolios",
@@ -428,8 +451,8 @@ def main():
             x=[max_sharpe['volatility'] * 100],
             y=[max_sharpe['expected_return'] * 100],
             mode='markers',
-            marker=dict(color='red', size=15, symbol='star'),
-            name="Max Sharpe Ratio Portfolio",
+            marker=dict(color='red', size=14, symbol='star'),
+            name="Max Sharpe",
             text=f"Max Sharpe<br>Return: {max_sharpe['expected_return']*100:.2f}%<br>Vol: {max_sharpe['volatility']*100:.2f}%"
         ))
 
@@ -438,8 +461,8 @@ def main():
             x=[min_var['volatility'] * 100],
             y=[min_var['expected_return'] * 100],
             mode='markers',
-            marker=dict(color='cyan', size=13, symbol='diamond'),
-            name="Minimum Variance Portfolio",
+            marker=dict(color='cyan', size=12, symbol='diamond'),
+            name="Min Variance",
             text=f"Min Variance<br>Return: {min_var['expected_return']*100:.2f}%<br>Vol: {min_var['volatility']*100:.2f}%"
         ))
 
@@ -447,7 +470,8 @@ def main():
             xaxis_title="Annualized Volatility (%)",
             yaxis_title="Annualized Expected Return (%)",
             hovermode="closest",
-            legend=dict(x=0.01, y=0.99)
+            margin=dict(l=10, r=10, t=40, b=20),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
 
         st.plotly_chart(fig_ef, use_container_width=True)
@@ -464,6 +488,7 @@ def main():
                 title=f"Max Sharpe Allocation (Sharpe = {max_sharpe['sharpe_ratio']:.2f})",
                 hole=0.4
             )
+            fig_ms_pie.update_layout(margin=dict(l=10, r=10, t=40, b=20))
             st.plotly_chart(fig_ms_pie, use_container_width=True)
 
         with col_p2:
@@ -474,6 +499,7 @@ def main():
                 title=f"Minimum Variance Allocation (Vol = {min_var['volatility']*100:.2f}%)",
                 hole=0.4
             )
+            fig_mv_pie.update_layout(margin=dict(l=10, r=10, t=40, b=20))
             st.plotly_chart(fig_mv_pie, use_container_width=True)
 
         # Allocation Weights Table
@@ -482,7 +508,7 @@ def main():
             "Max Sharpe Weight (%)": [f"{max_sharpe['weights'].get(t, 0)*100:.2f}%" for t in tickers],
             "Min Variance Weight (%)": [f"{min_var['weights'].get(t, 0)*100:.2f}%" for t in tickers]
         })
-        st.table(alloc_df)
+        st.dataframe(alloc_df, use_container_width=True, hide_index=True)
 
         st.markdown("---")
 
@@ -538,10 +564,10 @@ def main():
         )
 
     # ----------------------------------------------------
-    # TAB 5: GEMINI AI EXECUTIVE REPORT (AGENT 5)
+    # TAB 5: GEMINI AI EXECUTIVE REPORT (OPTIONAL)
     # ----------------------------------------------------
     with tab5:
-        st.subheader("🤖 Gemini AI Executive Investment Report")
+        st.subheader("📝 Gemini AI Executive Investment Report")
         st.markdown("Generated by **Agent 5 (Gemini AI Executive Summarizer)** synthesizing outputs across all 4 analytical agents.")
 
         report_text = ai_report_res.get('report', 'No report generated.')
