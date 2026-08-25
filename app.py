@@ -9,10 +9,10 @@ import os
 
 from src.agents.coordinator import AgentSystemCoordinator
 
-# Page Configuration - Responsive & Mobile-Ready
+# Page Configuration - Responsive & Mobile-Ready with Custom Logo
 st.set_page_config(
     page_title="Financial Statement & Portfolio Analytics Engine",
-    page_icon="📈",
+    page_icon="assets/logo.png" if os.path.exists("assets/logo.png") else "📈",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -20,13 +20,19 @@ st.set_page_config(
 # Custom Styling (Mobile-Responsive & Modern Dark Aesthetic)
 st.markdown("""
 <style>
+    .header-container {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
     .main-header {
         font-size: 2.1rem;
         font-weight: 700;
         background: linear-gradient(90deg, #1E88E5 0%, #00E676 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 0.4rem;
+        margin: 0;
         line-height: 1.2;
     }
     .sub-header {
@@ -86,6 +92,8 @@ def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, gemini_key):
 
 def main():
     # Sidebar Configuration
+    if os.path.exists("assets/logo.png"):
+        st.sidebar.image("assets/logo.png", width=70)
     st.sidebar.title("⚙️ Dashboard Controls")
 
     preset_options = {
@@ -135,8 +143,14 @@ def main():
 
     st.sidebar.button("🚀 Run Agent Pipeline", type="primary", use_container_width=True)
 
-    # App Header
-    st.markdown('<div class="main-header">Financial Statement & Portfolio Analytics Engine</div>', unsafe_allow_html=True)
+    # App Header with Logo
+    col_h1, col_h2 = st.columns([1, 14])
+    with col_h1:
+        if os.path.exists("assets/logo.png"):
+            st.image("assets/logo.png", width=65)
+    with col_h2:
+        st.markdown('<div class="main-header">Financial Statement & Portfolio Analytics Engine</div>', unsafe_allow_html=True)
+    
     st.markdown('<div class="sub-header">Multi-Agent Machine Learning & Quantitative Modern Portfolio Theory (MPT) Optimization Platform</div>', unsafe_allow_html=True)
 
     # Pipeline Agent Badge Indicator
