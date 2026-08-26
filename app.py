@@ -5,138 +5,17 @@ import plotly.express as px
 import plotly.graph_objects as go
 import datetime
 import json
-import base64
 import os
 
 from src.agents.coordinator import AgentSystemCoordinator
 
-# Page Configuration - Responsive & Mobile-Ready with Custom Logo & App Name
+# Page Configuration - Responsive & Mobile-Ready with Custom Logo
 st.set_page_config(
-    page_title="FinAnalytics AI | Portfolio Engine",
+    page_title="Financial Statement & Portfolio Analytics Engine",
     page_icon="assets/logo.png" if os.path.exists("assets/logo.png") else "📈",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
-# Load Logo as Base64 for Mobile PWA / Home Screen Shortcut Icons
-def get_logo_base64():
-    if os.path.exists("assets/logo.png"):
-        with open("assets/logo.png", "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
-    return ""
-
-logo_b64 = get_logo_base64()
-
-# Comprehensive Streamlit UI Cleansing (Hides default Streamlit toolbar, deploy buttons, and watermark)
-st.markdown(f"""
-<style>
-    /* Hide Default Streamlit Branding & Watermarks */
-    #MainMenu {{ visibility: hidden !important; display: none !important; }}
-    footer {{ visibility: hidden !important; display: none !important; }}
-    header {{ visibility: hidden !important; display: none !important; }}
-    .stDeployButton {{ display: none !important; }}
-    .stAppDeployButton {{ display: none !important; }}
-    [data-testid="stToolbar"] {{ display: none !important; }}
-    [data-testid="stDecoration"] {{ display: none !important; }}
-    [data-testid="stStatusWidget"] {{ display: none !important; }}
-    [data-testid="stHeader"] {{ display: none !important; }}
-    #stDecoration {{ display: none !important; }}
-    .viewerBadge_container__1QSob {{ display: none !important; }}
-
-    /* Custom Modern Dark Aesthetic & Header */
-    .main-header {{
-        font-size: 2.1rem;
-        font-weight: 700;
-        background: linear-gradient(90deg, #1E88E5 0%, #00E676 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin: 0;
-        line-height: 1.2;
-    }
-    .sub-header {{
-        color: #A0AEC0;
-        font-size: 1rem;
-        margin-bottom: 1.2rem;
-        line-height: 1.4;
-    }}
-    .agent-pill {{
-        display: inline-block;
-        padding: 0.25rem 0.6rem;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        margin-right: 0.3rem;
-        margin-bottom: 0.4rem;
-    }}
-    .pill-data {{ background-color: #2B6CB0; color: white; }}
-    .pill-fund {{ background-color: #2F855A; color: white; }}
-    .pill-quant {{ background-color: #6B46C1; color: white; }}
-    .pill-ml {{ background-color: #D69E2E; color: black; }}
-    .pill-ai {{ background-color: #E53E3E; color: white; }}
-    .pill-dev {{ background-color: #DD6B20; color: white; }}
-
-    @media (max-width: 768px) {{
-        .main-header {{
-            font-size: 1.4rem !important;
-        }}
-        .sub-header {{
-            font-size: 0.85rem !important;
-            margin-bottom: 0.8rem !important;
-        }}
-        .agent-pill {{
-            font-size: 0.65rem !important;
-            padding: 0.2rem 0.45rem !important;
-            margin-bottom: 0.3rem !important;
-        }}
-    }}
-</style>
-""", unsafe_allow_html=True)
-
-# Inject Mobile Home Screen Shortcut Metadata, App Title & Apple Touch Icons via JS Polling
-if logo_b64:
-    st.markdown(f"""
-    <script>
-        function applyCustomBranding() {{
-            try {{
-                var targetDocs = [window.document];
-                if (window.parent && window.parent.document) {{
-                    targetDocs.push(window.parent.document);
-                }}
-                if (window.top && window.top.document && window.top.document !== window.parent.document) {{
-                    targetDocs.push(window.top.document);
-                }}
-
-                const logoDataUrl = "data:image/png;base64,{logo_b64}";
-
-                targetDocs.forEach(function(doc) {{
-                    doc.title = "FinAnalytics AI | Portfolio Engine";
-                    
-                    var existingIcons = doc.querySelectorAll("link[rel*='icon'], link[rel='apple-touch-icon']");
-                    existingIcons.forEach(function(el) {{
-                        el.href = logoDataUrl;
-                    }});
-
-                    if (existingIcons.length === 0) {{
-                        var appleIcon = doc.createElement('link');
-                        appleIcon.rel = 'apple-touch-icon';
-                        appleIcon.sizes = '180x180';
-                        appleIcon.href = logoDataUrl;
-                        doc.head.appendChild(appleIcon);
-
-                        var favIcon = doc.createElement('link');
-                        favIcon.rel = 'icon';
-                        favIcon.type = 'image/png';
-                        favIcon.sizes = '192x192';
-                        favIcon.href = logoDataUrl;
-                        doc.head.appendChild(favIcon);
-                    }}
-                }});
-            }} catch (e) {{}}
-        }}
-        applyCustomBranding();
-        setInterval(applyCustomBranding, 1500);
-    </script>
-    """, unsafe_allow_html=True)
 
 # Global Plotly Mobile-Lock Configuration (Disables touch-zoom hijacking & toolbar overlap)
 PLOTLY_CONFIG = {
@@ -161,6 +40,57 @@ def lock_chart_for_mobile(fig):
     fig.update_yaxes(fixedrange=True)
     return fig
 
+# Custom Styling (Mobile-Responsive & Modern Dark Aesthetic)
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.1rem;
+        font-weight: 700;
+        background: linear-gradient(90deg, #1E88E5 0%, #00E676 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 0;
+        line-height: 1.2;
+    }
+    .sub-header {
+        color: #A0AEC0;
+        font-size: 1rem;
+        margin-bottom: 1.2rem;
+        line-height: 1.4;
+    }
+    .agent-pill {
+        display: inline-block;
+        padding: 0.25rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.3rem;
+        margin-bottom: 0.4rem;
+    }
+    .pill-data { background-color: #2B6CB0; color: white; }
+    .pill-fund { background-color: #2F855A; color: white; }
+    .pill-quant { background-color: #6B46C1; color: white; }
+    .pill-ml { background-color: #D69E2E; color: black; }
+    .pill-ai { background-color: #E53E3E; color: white; }
+    .pill-dev { background-color: #DD6B20; color: white; }
+
+    @media (max-width: 768px) {
+        .main-header {
+            font-size: 1.4rem !important;
+        }
+        .sub-header {
+            font-size: 0.85rem !important;
+            margin-bottom: 0.8rem !important;
+        }
+        .agent-pill {
+            font-size: 0.65rem !important;
+            padding: 0.2rem 0.45rem !important;
+            margin-bottom: 0.3rem !important;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
+
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplier, use_ml_views, gemini_key):
@@ -181,7 +111,7 @@ def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplie
 def main():
     # Sidebar Configuration
     if os.path.exists("assets/logo.png"):
-        st.sidebar.image("assets/logo.png", width=75)
+        st.sidebar.image("assets/logo.png", width=70)
     st.sidebar.title("⚙️ Dashboard Controls")
 
     preset_options = {
@@ -243,13 +173,13 @@ def main():
 
     st.sidebar.button("🚀 Run Agent Pipeline", type="primary", use_container_width=True)
 
-    # App Header with Logo & App Title
+    # App Header with Logo
     col_h1, col_h2 = st.columns([1, 14])
     with col_h1:
         if os.path.exists("assets/logo.png"):
-            st.image("assets/logo.png", width=70)
+            st.image("assets/logo.png", width=65)
     with col_h2:
-        st.markdown('<div class="main-header">FinAnalytics AI & Portfolio Engine</div>', unsafe_allow_html=True)
+        st.markdown('<div class="main-header">Financial Statement & Portfolio Analytics Engine</div>', unsafe_allow_html=True)
     
     st.markdown('<div class="sub-header">Multi-Agent Machine Learning, Risk Analytics (VaR/CVaR) & Modern Portfolio Theory (MPT) Platform</div>', unsafe_allow_html=True)
 
