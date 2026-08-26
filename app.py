@@ -5,17 +5,64 @@ import plotly.express as px
 import plotly.graph_objects as go
 import datetime
 import json
+import base64
 import os
 
 from src.agents.coordinator import AgentSystemCoordinator
 
-# Page Configuration - Responsive & Mobile-Ready with Custom Logo
+# Page Configuration - Responsive & Mobile-Ready with Custom Logo & App Name
 st.set_page_config(
-    page_title="Financial Statement & Portfolio Analytics Engine",
+    page_title="FinAnalytics AI | Portfolio Engine",
     page_icon="assets/logo.png" if os.path.exists("assets/logo.png") else "📈",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# Load Logo as Base64 for Mobile PWA / Home Screen Shortcut Icons
+def get_logo_base64():
+    if os.path.exists("assets/logo.png"):
+        with open("assets/logo.png", "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    return ""
+
+logo_b64 = get_logo_base64()
+
+# Inject Mobile Home Screen Shortcut Metadata, App Title & Apple Touch Icons
+if logo_b64:
+    st.markdown(f"""
+    <head>
+        <title>FinAnalytics AI</title>
+        <meta name="apple-mobile-web-app-title" content="FinAnalytics AI">
+        <meta name="application-name" content="FinAnalytics AI">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="theme-color" content="#0E1117">
+        <link rel="apple-touch-icon" sizes="180x180" href="data:image/png;base64,{logo_b64}">
+        <link rel="icon" type="image/png" sizes="192x192" href="data:image/png;base64,{logo_b64}">
+        <link rel="shortcut icon" href="data:image/png;base64,{logo_b64}">
+    </head>
+    <script>
+        // Update parent browser document for Home Screen Shortcuts on Android / iOS
+        try {{
+            const logoDataUrl = "data:image/png;base64,{logo_b64}";
+            window.parent.document.title = "FinAnalytics AI | Portfolio Engine";
+            
+            let appleIcon = window.parent.document.querySelector('link[rel="apple-touch-icon"]');
+            if (!appleIcon) {{
+                appleIcon = window.parent.document.createElement('link');
+                appleIcon.rel = 'apple-touch-icon';
+                window.parent.document.head.appendChild(appleIcon);
+            }}
+            appleIcon.href = logoDataUrl;
+
+            let favIcon = window.parent.document.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
+            if (favIcon) {{
+                favIcon.href = logoDataUrl;
+            }}
+        }} catch (e) {{}}
+    </script>
+    """, unsafe_allow_html=True)
 
 # Global Plotly Mobile-Lock Configuration (Disables touch-zoom hijacking & toolbar overlap)
 PLOTLY_CONFIG = {
@@ -173,13 +220,13 @@ def main():
 
     st.sidebar.button("🚀 Run Agent Pipeline", type="primary", use_container_width=True)
 
-    # App Header with Logo
+    # App Header with Logo & App Title
     col_h1, col_h2 = st.columns([1, 14])
     with col_h1:
         if os.path.exists("assets/logo.png"):
             st.image("assets/logo.png", width=65)
     with col_h2:
-        st.markdown('<div class="main-header">Financial Statement & Portfolio Analytics Engine</div>', unsafe_allow_html=True)
+        st.markdown('<div class="main-header">FinAnalytics AI & Portfolio Engine</div>', unsafe_allow_html=True)
     
     st.markdown('<div class="sub-header">Multi-Agent Machine Learning, Risk Analytics (VaR/CVaR) & Modern Portfolio Theory (MPT) Platform</div>', unsafe_allow_html=True)
 
