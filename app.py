@@ -27,40 +27,114 @@ def get_logo_base64():
 
 logo_b64 = get_logo_base64()
 
-# Inject Mobile Home Screen Shortcut Metadata, App Title & Apple Touch Icons
+# Comprehensive Streamlit UI Cleansing (Hides default Streamlit toolbar, deploy buttons, and watermark)
+st.markdown(f"""
+<style>
+    /* Hide Default Streamlit Branding & Watermarks */
+    #MainMenu {{ visibility: hidden !important; display: none !important; }}
+    footer {{ visibility: hidden !important; display: none !important; }}
+    header {{ visibility: hidden !important; display: none !important; }}
+    .stDeployButton {{ display: none !important; }}
+    .stAppDeployButton {{ display: none !important; }}
+    [data-testid="stToolbar"] {{ display: none !important; }}
+    [data-testid="stDecoration"] {{ display: none !important; }}
+    [data-testid="stStatusWidget"] {{ display: none !important; }}
+    [data-testid="stHeader"] {{ display: none !important; }}
+    #stDecoration {{ display: none !important; }}
+    .viewerBadge_container__1QSob {{ display: none !important; }}
+
+    /* Custom Modern Dark Aesthetic & Header */
+    .main-header {{
+        font-size: 2.1rem;
+        font-weight: 700;
+        background: linear-gradient(90deg, #1E88E5 0%, #00E676 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 0;
+        line-height: 1.2;
+    }
+    .sub-header {{
+        color: #A0AEC0;
+        font-size: 1rem;
+        margin-bottom: 1.2rem;
+        line-height: 1.4;
+    }}
+    .agent-pill {{
+        display: inline-block;
+        padding: 0.25rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.3rem;
+        margin-bottom: 0.4rem;
+    }}
+    .pill-data {{ background-color: #2B6CB0; color: white; }}
+    .pill-fund {{ background-color: #2F855A; color: white; }}
+    .pill-quant {{ background-color: #6B46C1; color: white; }}
+    .pill-ml {{ background-color: #D69E2E; color: black; }}
+    .pill-ai {{ background-color: #E53E3E; color: white; }}
+    .pill-dev {{ background-color: #DD6B20; color: white; }}
+
+    @media (max-width: 768px) {{
+        .main-header {{
+            font-size: 1.4rem !important;
+        }}
+        .sub-header {{
+            font-size: 0.85rem !important;
+            margin-bottom: 0.8rem !important;
+        }}
+        .agent-pill {{
+            font-size: 0.65rem !important;
+            padding: 0.2rem 0.45rem !important;
+            margin-bottom: 0.3rem !important;
+        }}
+    }}
+</style>
+""", unsafe_allow_html=True)
+
+# Inject Mobile Home Screen Shortcut Metadata, App Title & Apple Touch Icons via JS Polling
 if logo_b64:
     st.markdown(f"""
-    <head>
-        <title>FinAnalytics AI</title>
-        <meta name="apple-mobile-web-app-title" content="FinAnalytics AI">
-        <meta name="application-name" content="FinAnalytics AI">
-        <meta name="mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-        <meta name="theme-color" content="#0E1117">
-        <link rel="apple-touch-icon" sizes="180x180" href="data:image/png;base64,{logo_b64}">
-        <link rel="icon" type="image/png" sizes="192x192" href="data:image/png;base64,{logo_b64}">
-        <link rel="shortcut icon" href="data:image/png;base64,{logo_b64}">
-    </head>
     <script>
-        // Update parent browser document for Home Screen Shortcuts on Android / iOS
-        try {{
-            const logoDataUrl = "data:image/png;base64,{logo_b64}";
-            window.parent.document.title = "FinAnalytics AI | Portfolio Engine";
-            
-            let appleIcon = window.parent.document.querySelector('link[rel="apple-touch-icon"]');
-            if (!appleIcon) {{
-                appleIcon = window.parent.document.createElement('link');
-                appleIcon.rel = 'apple-touch-icon';
-                window.parent.document.head.appendChild(appleIcon);
-            }}
-            appleIcon.href = logoDataUrl;
+        function applyCustomBranding() {{
+            try {{
+                var targetDocs = [window.document];
+                if (window.parent && window.parent.document) {{
+                    targetDocs.push(window.parent.document);
+                }}
+                if (window.top && window.top.document && window.top.document !== window.parent.document) {{
+                    targetDocs.push(window.top.document);
+                }}
 
-            let favIcon = window.parent.document.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
-            if (favIcon) {{
-                favIcon.href = logoDataUrl;
-            }}
-        }} catch (e) {{}}
+                const logoDataUrl = "data:image/png;base64,{logo_b64}";
+
+                targetDocs.forEach(function(doc) {{
+                    doc.title = "FinAnalytics AI | Portfolio Engine";
+                    
+                    var existingIcons = doc.querySelectorAll("link[rel*='icon'], link[rel='apple-touch-icon']");
+                    existingIcons.forEach(function(el) {{
+                        el.href = logoDataUrl;
+                    }});
+
+                    if (existingIcons.length === 0) {{
+                        var appleIcon = doc.createElement('link');
+                        appleIcon.rel = 'apple-touch-icon';
+                        appleIcon.sizes = '180x180';
+                        appleIcon.href = logoDataUrl;
+                        doc.head.appendChild(appleIcon);
+
+                        var favIcon = doc.createElement('link');
+                        favIcon.rel = 'icon';
+                        favIcon.type = 'image/png';
+                        favIcon.sizes = '192x192';
+                        favIcon.href = logoDataUrl;
+                        doc.head.appendChild(favIcon);
+                    }}
+                }});
+            }} catch (e) {{}}
+        }}
+        applyCustomBranding();
+        setInterval(applyCustomBranding, 1500);
     </script>
     """, unsafe_allow_html=True)
 
@@ -87,57 +161,6 @@ def lock_chart_for_mobile(fig):
     fig.update_yaxes(fixedrange=True)
     return fig
 
-# Custom Styling (Mobile-Responsive & Modern Dark Aesthetic)
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.1rem;
-        font-weight: 700;
-        background: linear-gradient(90deg, #1E88E5 0%, #00E676 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin: 0;
-        line-height: 1.2;
-    }
-    .sub-header {
-        color: #A0AEC0;
-        font-size: 1rem;
-        margin-bottom: 1.2rem;
-        line-height: 1.4;
-    }
-    .agent-pill {
-        display: inline-block;
-        padding: 0.25rem 0.6rem;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        margin-right: 0.3rem;
-        margin-bottom: 0.4rem;
-    }
-    .pill-data { background-color: #2B6CB0; color: white; }
-    .pill-fund { background-color: #2F855A; color: white; }
-    .pill-quant { background-color: #6B46C1; color: white; }
-    .pill-ml { background-color: #D69E2E; color: black; }
-    .pill-ai { background-color: #E53E3E; color: white; }
-    .pill-dev { background-color: #DD6B20; color: white; }
-
-    @media (max-width: 768px) {
-        .main-header {
-            font-size: 1.4rem !important;
-        }
-        .sub-header {
-            font-size: 0.85rem !important;
-            margin-bottom: 0.8rem !important;
-        }
-        .agent-pill {
-            font-size: 0.65rem !important;
-            padding: 0.2rem 0.45rem !important;
-            margin-bottom: 0.3rem !important;
-        }
-    }
-</style>
-""", unsafe_allow_html=True)
-
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplier, use_ml_views, gemini_key):
@@ -158,7 +181,7 @@ def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplie
 def main():
     # Sidebar Configuration
     if os.path.exists("assets/logo.png"):
-        st.sidebar.image("assets/logo.png", width=70)
+        st.sidebar.image("assets/logo.png", width=75)
     st.sidebar.title("⚙️ Dashboard Controls")
 
     preset_options = {
@@ -224,7 +247,7 @@ def main():
     col_h1, col_h2 = st.columns([1, 14])
     with col_h1:
         if os.path.exists("assets/logo.png"):
-            st.image("assets/logo.png", width=65)
+            st.image("assets/logo.png", width=70)
     with col_h2:
         st.markdown('<div class="main-header">FinAnalytics AI & Portfolio Engine</div>', unsafe_allow_html=True)
     
