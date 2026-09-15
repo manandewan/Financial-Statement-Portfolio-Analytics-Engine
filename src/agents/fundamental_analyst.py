@@ -14,6 +14,7 @@ class FundamentalAnalystAgent:
       * Leverage: Total Debt / EBITDA, Net Debt / EBITDA
       * Coverage: EBITDA / Interest Expense, Fixed Charge Coverage Ratio (FCCR)
       * Liquidity / Solvency: CFO / Total Debt, Current Ratio, Quick Ratio
+      * Synthetic Credit Ratings: Quantitative S&P/Moody's equivalent notches (Damodaran Model)
     Generates structured metrics and credit risk flags for each asset.
     """
     def __init__(self):
@@ -150,7 +151,6 @@ class FundamentalAnalystAgent:
             ])
 
             # --- FALLBACK CALCULATIONS ---
-            # CapEx is usually negative in Cash Flow, take absolute
             capex_abs = abs(capex) if not pd.isna(capex) else 0.0
 
             # FCF fallback
@@ -223,7 +223,6 @@ class FundamentalAnalystAgent:
             # =========================================================
             # 1. CORE FUNDAMENTAL RATIOS (EQUITY)
             # =========================================================
-            # Debt-to-Equity Ratio
             if not pd.isna(total_debt) and not pd.isna(total_equity) and total_equity != 0:
                 debt_to_equity = float(total_debt / total_equity)
             elif 'debtToEquity' in info and info['debtToEquity'] is not None:
@@ -231,7 +230,6 @@ class FundamentalAnalystAgent:
             else:
                 debt_to_equity = np.nan
 
-            # Current Ratio
             if not pd.isna(current_assets) and not pd.isna(current_liab) and current_liab != 0:
                 current_ratio = float(current_assets / current_liab)
             elif 'currentRatio' in info and info['currentRatio'] is not None:
@@ -239,7 +237,6 @@ class FundamentalAnalystAgent:
             else:
                 current_ratio = np.nan
 
-            # Return on Equity (ROE)
             if not pd.isna(net_income) and not pd.isna(total_equity) and total_equity != 0:
                 roe = float(net_income / total_equity)
             elif 'returnOnEquity' in info and info['returnOnEquity'] is not None:
@@ -247,13 +244,11 @@ class FundamentalAnalystAgent:
             else:
                 roe = np.nan
 
-            # Free Cash Flow Yield
             if not pd.isna(free_cash_flow) and not pd.isna(market_cap) and market_cap > 0:
                 fcf_yield = float(free_cash_flow / market_cap)
             else:
                 fcf_yield = np.nan
 
-            # Equity Flags
             flags = []
             if not pd.isna(total_equity) and total_equity < 0:
                 flags.append("Negative Equity Deficit")
@@ -302,11 +297,9 @@ class FundamentalAnalystAgent:
             # =========================================================
             # 2. CREDIT WORTHINESS & SOLVENCY RATIOS
             # =========================================================
-            # Net Debt = Total Debt - Cash & Cash Equivalents
             net_debt = float(total_debt - cash_and_equivalents) if not pd.isna(total_debt) and not pd.isna(cash_and_equivalents) else np.nan
 
             # A. LEVERAGE RATIOS
-            # Total Debt / EBITDA
             if not pd.isna(total_debt) and not pd.isna(ebitda) and ebitda > 0:
                 total_debt_to_ebitda = float(total_debt / ebitda)
             elif not pd.isna(total_debt) and total_debt == 0:
@@ -314,7 +307,6 @@ class FundamentalAnalystAgent:
             else:
                 total_debt_to_ebitda = np.nan
 
-            # Net Debt / EBITDA
             if not pd.isna(net_debt) and not pd.isna(ebitda) and ebitda > 0:
                 net_debt_to_ebitda = float(net_debt / ebitda)
             elif not pd.isna(net_debt) and net_debt <= 0:
@@ -323,7 +315,6 @@ class FundamentalAnalystAgent:
                 net_debt_to_ebitda = np.nan
 
             # B. COVERAGE RATIOS
-            # EBITDA / Interest Expense
             if not pd.isna(ebitda) and not pd.isna(interest_expense) and interest_expense > 0:
                 ebitda_interest_coverage = float(ebitda / interest_expense)
             elif not pd.isna(interest_expense) and interest_expense == 0:
@@ -332,7 +323,6 @@ class FundamentalAnalystAgent:
                 ebitda_interest_coverage = np.nan
 
             # Fixed Charge Coverage Ratio (FCCR):
-            # FCCR = (EBITDA - Maintenance CapEx - Cash Taxes) / (Interest Expense + Mandatory Principal Repayments + Lease Payments)
             fccr_numerator = (ebitda if not pd.isna(ebitda) else 0.0) - capex_abs - cash_taxes
             mand_repayments = abs(principal_repayments) if not pd.isna(principal_repayments) else 0.0
             lease_pmts = abs(lease_payments) if not pd.isna(lease_payments) else 0.0
@@ -346,15 +336,13 @@ class FundamentalAnalystAgent:
                 fccr = np.nan
 
             # C. LIQUIDITY / SOLVENCY RATIOS
-            # CFO / Total Debt
             if not pd.isna(operating_cash_flow) and not pd.isna(total_debt) and total_debt > 0:
                 cfo_to_total_debt = float(operating_cash_flow / total_debt)
             elif not pd.isna(total_debt) and total_debt == 0:
-                cfo_to_total_debt = 999.0  # Zero debt
+                cfo_to_total_debt = 999.0
             else:
                 cfo_to_total_debt = np.nan
 
-            # Quick Ratio = (Current Assets - Inventory) / Current Liabilities
             if not pd.isna(current_assets) and not pd.isna(current_liab) and current_liab > 0:
                 quick_assets = current_assets - inventory
                 quick_ratio = float(quick_assets / current_liab)
@@ -363,7 +351,6 @@ class FundamentalAnalystAgent:
             else:
                 quick_ratio = np.nan
 
-            # Credit Profile Flags & Classification
             credit_flags = []
             if net_debt is not None and net_debt < 0:
                 credit_flags.append("Net Cash Surplus")
@@ -381,13 +368,32 @@ class FundamentalAnalystAgent:
             if not pd.isna(cfo_to_total_debt) and cfo_to_total_debt >= 0.30:
                 credit_flags.append("Robust Cash Flow Repayment (CFO/Debt >= 30%)")
 
-            # Synthetic Credit Tier
-            if (net_debt < 0 or (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 2.0)) and (pd.isna(fccr) or fccr >= 2.5):
+            # =========================================================
+            # D. DAMODARAN QUANTITATIVE SYNTHETIC CREDIT RATING NOTCH
+            # =========================================================
+            cov_effective = fccr if not pd.isna(fccr) and fccr != 999.0 else (ebitda_interest_coverage if not pd.isna(ebitda_interest_coverage) else 0.0)
+
+            if (net_debt < 0 or (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 0.8)) and (cov_effective >= 8.5 or ebitda_interest_coverage == 999.0):
+                synthetic_notch = "AAA (Synthetic)"
                 credit_rating_tier = "Prime / Investment Grade (IG)"
-            elif not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda > 4.0:
-                credit_rating_tier = "High Yield / Speculative Grade"
+            elif (net_debt < 0 or (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 1.5)) and cov_effective >= 6.0:
+                synthetic_notch = "AA (Synthetic)"
+                credit_rating_tier = "Prime / Investment Grade (IG)"
+            elif (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 2.5) and cov_effective >= 4.0:
+                synthetic_notch = "A (Synthetic)"
+                credit_rating_tier = "Upper Medium Investment Grade"
+            elif (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 3.5) and cov_effective >= 2.5:
+                synthetic_notch = "BBB (Synthetic - Lowest IG)"
+                credit_rating_tier = "Lower Medium Investment Grade"
+            elif (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 4.5) and cov_effective >= 1.5:
+                synthetic_notch = "BB (Synthetic - High Yield)"
+                credit_rating_tier = "Speculative / High Yield"
+            elif cov_effective >= 0.8:
+                synthetic_notch = "B (Synthetic - High Yield)"
+                credit_rating_tier = "Highly Speculative"
             else:
-                credit_rating_tier = "Moderate Investment Grade / Crossover"
+                synthetic_notch = "CCC / Distress (Synthetic)"
+                credit_rating_tier = "Substantial Credit Risk"
 
             credit_summary[ticker] = {
                 'ebitda': ebitda,
@@ -407,6 +413,9 @@ class FundamentalAnalystAgent:
                 'current_ratio': current_ratio,
                 'quick_ratio': quick_ratio,
                 'credit_rating_tier': credit_rating_tier,
+                'synthetic_credit_rating': synthetic_notch,
+                'is_synthetic': True,
+                'methodology': "Damodaran Quantitative Interest Coverage & Leverage Framework",
                 'credit_flags': credit_flags
             }
 

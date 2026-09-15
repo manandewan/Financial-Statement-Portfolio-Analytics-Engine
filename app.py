@@ -334,6 +334,8 @@ def main():
         st.subheader("💳 Credit Worthiness, Debt Serviceability & Solvency")
         st.markdown("Evaluated by **Agent 2 (Fundamental & Credit Analyst)** assessing debt service capacity, leverage burden, and cash flow buffer under distress.")
 
+        st.info("ℹ️ **Methodology Notice: Synthetic Credit Ratings**: The letter ratings below are **Synthetic Credit Ratings (Damodaran Quantitative Framework)** estimated algorithmically from reported leverage (Net Debt / EBITDA), Fixed Charge Coverage (FCCR), and liquidity. They represent quantitative proxies for credit risk, not official credit opinions issued by S&P Global, Moody's, or Fitch Ratings.")
+
         # Summary Table of Key Credit Ratios
         credit_table_data = []
         for t in tickers:
@@ -384,7 +386,7 @@ def main():
                 cfo_td_str = f"{cfo_td*100:.1f}%"
 
             qr = f"{cm.get('quick_ratio'):.2f}" if not pd.isna(cm.get('quick_ratio')) else "N/A"
-            tier = cm.get('credit_rating_tier', 'Unrated')
+            synth_rating = cm.get('synthetic_credit_rating', 'Unrated')
             flags = ", ".join(cm.get('credit_flags', [])) if cm.get('credit_flags') else "Standard"
 
             credit_table_data.append({
@@ -397,7 +399,7 @@ def main():
                 "FCCR": fccr_str,
                 "CFO / Total Debt": cfo_td_str,
                 "Quick Ratio": qr,
-                "Credit Rating Tier": tier,
+                "Synthetic Rating (S&P Equiv.)": synth_rating,
                 "Credit Signals": flags
             })
 
@@ -467,14 +469,16 @@ def main():
         """)
 
         # Key Credit Benchmarks Guide
-        st.markdown("### 🎯 Institutional Credit Benchmarks & Rating Matrix")
+        st.markdown("### 🎯 Damodaran Synthetic Credit Rating Matrix & Institutional Benchmarks")
+        st.caption("Quantitative framework mapping financial ratios to estimated S&P / Moody's rating notches:")
+        
         bench_col1, bench_col2, bench_col3 = st.columns(3)
         with bench_col1:
-            st.success("**Prime / Investment Grade (IG)**\n- Net Debt / EBITDA: $< 2.0x$\n- FCCR: $> 2.5x$\n- Quick Ratio: $> 1.0$\n- Robust debt service buffer.")
+            st.success("**Prime / Upper IG (AAA to A)**\n- Net Debt / EBITDA: $< 2.0x$\n- FCCR: $> 4.0x$\n- Quick Ratio: $> 1.0$\n- *Negligible default risk; vast liquidity reserves.*")
         with bench_col2:
-            st.warning("**Moderate / Crossover Tier**\n- Net Debt / EBITDA: $2.0x - 3.5x$\n- FCCR: $1.5x - 2.5x$\n- Quick Ratio: $0.7 - 1.0$\n- Sensitive to economic downturns.")
+            st.warning("**Lower IG to Crossover (BBB to BB)**\n- Net Debt / EBITDA: $2.0x - 4.0x$\n- FCCR: $1.5x - 3.5x$\n- Quick Ratio: $0.7 - 1.0$\n- *Adequate capacity; vulnerable to macro downcycles.*")
         with bench_col3:
-            st.error("**High Yield / Leveraged Watchlist**\n- Net Debt / EBITDA: $> 4.0x$\n- FCCR: $< 1.2x$\n- Quick Ratio: $< 0.6$\n- Refinancing and liquidity default risk.")
+            st.error("**Speculative / Junk (B to CCC)**\n- Net Debt / EBITDA: $> 4.5x$\n- FCCR: $< 1.2x$\n- Quick Ratio: $< 0.6$\n- *High leverage, elevated refinancing & default hazard.*")
 
     # ----------------------------------------------------
     # TAB 3: HISTORICAL PERFORMANCE & RISK
