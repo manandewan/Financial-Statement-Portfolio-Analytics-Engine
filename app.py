@@ -69,10 +69,21 @@ st.markdown("""
     }
     .pill-data { background-color: #2B6CB0; color: white; }
     .pill-fund { background-color: #2F855A; color: white; }
+    .pill-credit { background-color: #C53030; color: white; }
     .pill-quant { background-color: #6B46C1; color: white; }
     .pill-ml { background-color: #D69E2E; color: black; }
     .pill-ai { background-color: #E53E3E; color: white; }
     .pill-dev { background-color: #DD6B20; color: white; }
+
+    .credit-box {
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid #334155;
+        border-left: 5px solid #38BDF8;
+        border-radius: 8px;
+        padding: 1.2rem;
+        margin-top: 1.2rem;
+        margin-bottom: 1.2rem;
+    }
 
     @media (max-width: 768px) {
         .main-header {
@@ -164,7 +175,7 @@ def main():
     st.sidebar.markdown("### 🤖 Multi-Agent Architecture")
     st.sidebar.markdown("""
     - **Agent 1: Data Architect**: Ingests prices & statements.
-    - **Agent 2: Fundamental Analyst**: Computes D/E, ROE, FCF Yield.
+    - **Agent 2: Fundamental & Credit Analyst**: Computes D/E, ROE, FCCR, Leverage & Solvency.
     - **Agent 3: Quantitative Analyst**: MPT, VaR/CVaR & Efficient Frontier.
     - **Agent 4: Predictive ML Analyst**: Random Forest return forecasts.
     - **Agent 5: Gemini AI Summarizer**: Wall Street Investment Memos.
@@ -181,13 +192,14 @@ def main():
     with col_h2:
         st.markdown('<div class="main-header">Financial Statement & Portfolio Analytics Engine</div>', unsafe_allow_html=True)
     
-    st.markdown('<div class="sub-header">Multi-Agent Machine Learning, Risk Analytics (VaR/CVaR) & Modern Portfolio Theory (MPT) Platform</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Multi-Agent Machine Learning, Credit Worthiness (FCCR/Leverage), Risk Analytics & MPT Platform</div>', unsafe_allow_html=True)
 
     # Pipeline Agent Badge Indicator
     st.markdown("""
     <div>
         <span class="agent-pill pill-data">Agent 1: Financial Data Architect</span>
         <span class="agent-pill pill-fund">Agent 2: Fundamental Analyst</span>
+        <span class="agent-pill pill-credit">Credit Worthiness: FCCR & Solvency</span>
         <span class="agent-pill pill-quant">Agent 3: Quantitative Analyst</span>
         <span class="agent-pill pill-ml">Agent 4: Predictive ML Analyst</span>
         <span class="agent-pill pill-ai">Agent 5: Gemini AI Summarizer</span>
@@ -201,7 +213,7 @@ def main():
         st.stop()
 
     # Execution Trigger
-    with st.spinner("🔄 Coordinating Agents: Ingesting data, analyzing fundamentals, training ML models, and optimizing portfolio..."):
+    with st.spinner("🔄 Coordinating Agents: Ingesting data, analyzing fundamentals & credit worthiness, training ML models, and optimizing portfolio..."):
         try:
             data_bundle = run_agent_pipeline(
                 tickers_tuple=tuple(ticker_list),
@@ -221,13 +233,15 @@ def main():
     prices_df = data_bundle['prices']
     statements = data_bundle['statements']
     fundamental_res = data_bundle['fundamental']['metrics']
+    credit_res = data_bundle['fundamental'].get('credit_metrics', {})
     ml_res = data_bundle.get('ml_predictive', {})
     quant_res = data_bundle['quant']
     ai_report_res = data_bundle.get('ai_report', {})
 
-    # Tabs Navigation
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    # Tabs Navigation (Including New Credit Worthiness & Solvency Tab)
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🏢 Fundamental Health",
+        "💳 Credit Worthiness & Solvency",
         "📊 Historical Performance & Risk",
         "🤖 ML Return Forecasting",
         "🎯 Portfolio Optimization & VaR",
@@ -314,9 +328,158 @@ def main():
                 st.info(f"No statement data available for {selected_stmt_ticker}.")
 
     # ----------------------------------------------------
-    # TAB 2: HISTORICAL PERFORMANCE & RISK
+    # TAB 2: CREDIT WORTHINESS & SOLVENCY (NEW TAB)
     # ----------------------------------------------------
     with tab2:
+        st.subheader("💳 Credit Worthiness, Debt Serviceability & Solvency")
+        st.markdown("Evaluated by **Agent 2 (Fundamental & Credit Analyst)** assessing debt service capacity, leverage burden, and cash flow buffer under distress.")
+
+        # Summary Table of Key Credit Ratios
+        credit_table_data = []
+        for t in tickers:
+            cm = credit_res.get(t, {})
+            tot_debt = f"${cm.get('total_debt', 0)/1e9:.2f}B" if not pd.isna(cm.get('total_debt')) else "N/A"
+            net_d = cm.get('net_debt', np.nan)
+            if pd.isna(net_d):
+                net_debt_str = "N/A"
+            elif net_d < 0:
+                net_debt_str = f"-${abs(net_d)/1e9:.2f}B (Net Cash)"
+            else:
+                net_debt_str = f"${net_d/1e9:.2f}B"
+
+            # Leverage
+            td_ebitda = f"{cm.get('total_debt_to_ebitda'):.2f}x" if not pd.isna(cm.get('total_debt_to_ebitda')) else "N/A"
+            nd_ebitda = cm.get('net_debt_to_ebitda')
+            if pd.isna(nd_ebitda):
+                nd_ebitda_str = "N/A"
+            elif nd_ebitda < 0:
+                nd_ebitda_str = f"{nd_ebitda:.2f}x (Net Cash)"
+            else:
+                nd_ebitda_str = f"{nd_ebitda:.2f}x"
+
+            # Coverage
+            ebitda_cov = cm.get('ebitda_interest_coverage')
+            if pd.isna(ebitda_cov):
+                ebitda_cov_str = "N/A"
+            elif ebitda_cov >= 50:
+                ebitda_cov_str = ">50.0x (Negligible Debt)"
+            else:
+                ebitda_cov_str = f"{ebitda_cov:.2f}x"
+
+            fccr_val = cm.get('fccr')
+            if pd.isna(fccr_val):
+                fccr_str = "N/A"
+            elif fccr_val >= 50:
+                fccr_str = ">50.0x (Prime Buffer)"
+            else:
+                fccr_str = f"{fccr_val:.2f}x"
+
+            # Liquidity / Solvency
+            cfo_td = cm.get('cfo_to_total_debt')
+            if pd.isna(cfo_td):
+                cfo_td_str = "N/A"
+            elif cfo_td >= 10:
+                cfo_td_str = ">100% (Cash Flow >> Debt)"
+            else:
+                cfo_td_str = f"{cfo_td*100:.1f}%"
+
+            qr = f"{cm.get('quick_ratio'):.2f}" if not pd.isna(cm.get('quick_ratio')) else "N/A"
+            tier = cm.get('credit_rating_tier', 'Unrated')
+            flags = ", ".join(cm.get('credit_flags', [])) if cm.get('credit_flags') else "Standard"
+
+            credit_table_data.append({
+                "Ticker": t,
+                "Total Debt": tot_debt,
+                "Net Debt": net_debt_str,
+                "Total Debt / EBITDA": td_ebitda,
+                "Net Debt / EBITDA": nd_ebitda_str,
+                "EBITDA / Int Exp": ebitda_cov_str,
+                "FCCR": fccr_str,
+                "CFO / Total Debt": cfo_td_str,
+                "Quick Ratio": qr,
+                "Credit Rating Tier": tier,
+                "Credit Signals": flags
+            })
+
+        credit_df = pd.DataFrame(credit_table_data)
+        st.dataframe(credit_df, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # Comparative Credit Charts
+        col_c1, col_c2 = st.columns(2)
+
+        with col_c1:
+            st.markdown("### ⚖️ Leverage Profile: Total Debt vs. Net Debt to EBITDA")
+            lev_data = []
+            for t in tickers:
+                cm = credit_res.get(t, {})
+                td_eb = cm.get('total_debt_to_ebitda', 0) or 0
+                nd_eb = cm.get('net_debt_to_ebitda', 0) or 0
+                lev_data.append({"Ticker": t, "Metric": "Total Debt / EBITDA", "Value": max(td_eb, 0)})
+                lev_data.append({"Ticker": t, "Metric": "Net Debt / EBITDA", "Value": nd_eb})
+
+            lev_df = pd.DataFrame(lev_data)
+            fig_lev = px.bar(
+                lev_df, x="Ticker", y="Value", color="Metric", barmode="group",
+                title="Leverage Multiples (Lower is Safer; <2.0x is IG)",
+                labels={"Value": "Multiple (x)"},
+                color_discrete_map={"Total Debt / EBITDA": "#E53E3E", "Net Debt / EBITDA": "#3182CE"}
+            )
+            fig_lev = lock_chart_for_mobile(fig_lev)
+            st.plotly_chart(fig_lev, use_container_width=True, config=PLOTLY_CONFIG)
+
+        with col_c2:
+            st.markdown("### 🛡️ Coverage Profile: Interest Coverage vs. FCCR")
+            cov_data = []
+            for t in tickers:
+                cm = credit_res.get(t, {})
+                eb_cov = min(cm.get('ebitda_interest_coverage', 0) or 0, 30.0)  # clamp for chart readability
+                fccr_v = min(cm.get('fccr', 0) or 0, 30.0)
+                cov_data.append({"Ticker": t, "Metric": "EBITDA Interest Coverage", "Value": max(eb_cov, 0)})
+                cov_data.append({"Ticker": t, "Metric": "FCCR (Fixed Charge Coverage)", "Value": max(fccr_v, 0)})
+
+            cov_df = pd.DataFrame(cov_data)
+            fig_cov = px.bar(
+                cov_df, x="Ticker", y="Value", color="Metric", barmode="group",
+                title="Debt Coverage Buffer (Higher is Safer; >2.5x is Robust)",
+                labels={"Value": "Coverage Multiple (x)"},
+                color_discrete_map={"EBITDA Interest Coverage": "#805AD5", "FCCR (Fixed Charge Coverage)": "#38A169"}
+            )
+            fig_cov = lock_chart_for_mobile(fig_cov)
+            st.plotly_chart(fig_cov, use_container_width=True, config=PLOTLY_CONFIG)
+
+        # Institutional Analyst Callout Box: Why Analysts Prefer FCCR over EBITDA Coverage
+        st.markdown("""
+        <div class="credit-box">
+            <h4 style="margin-top:0; color:#38BDF8;">📘 Why Institutional Analysts Prefer FCCR over EBITDA Interest Coverage</h4>
+            <p>While <b>EBITDA / Interest Expense</b> is widely quoted, institutional credit rating agencies (Moody's, S&P, Fitch) and commercial lenders strongly prefer the <b>Fixed Charge Coverage Ratio (FCCR)</b> for underwriting credit risk due to two structural flaws in EBITDA coverage:</p>
+            <ul>
+                <li><b>1. EBITDA Ignores Mandatory Cash Outflows:</b> EBITDA represents pre-tax operating earnings before non-cash charges, but companies cannot service debt with gross earnings. EBITDA completely excludes <i>Cash Taxes</i>, required <i>Maintenance CapEx</i> (mandatory reinvestment just to keep the business operational), and working capital swings.</li>
+                <li><b>2. Interest Coverage Ignores Mandatory Non-Interest Debt Charges:</b> Standard interest coverage examines only the interest line on the Income Statement. It completely ignores contractual <i>Operating / Financing Lease Payments (rent)</i>, <i>Scheduled Mandatory Principal Amortization</i>, and debt maturity repayment obligations.</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("#### Mathematical Definition of Fixed Charge Coverage Ratio (FCCR):")
+        st.latex(r"""
+        \text{FCCR} = \frac{\text{EBITDA} - \text{Maintenance CapEx} - \text{Cash Taxes}}{\text{Interest Expense} + \text{Mandatory Principal Repayments} + \text{Lease Payments}}
+        """)
+
+        # Key Credit Benchmarks Guide
+        st.markdown("### 🎯 Institutional Credit Benchmarks & Rating Matrix")
+        bench_col1, bench_col2, bench_col3 = st.columns(3)
+        with bench_col1:
+            st.success("**Prime / Investment Grade (IG)**\n- Net Debt / EBITDA: $< 2.0x$\n- FCCR: $> 2.5x$\n- Quick Ratio: $> 1.0$\n- Robust debt service buffer.")
+        with bench_col2:
+            st.warning("**Moderate / Crossover Tier**\n- Net Debt / EBITDA: $2.0x - 3.5x$\n- FCCR: $1.5x - 2.5x$\n- Quick Ratio: $0.7 - 1.0$\n- Sensitive to economic downturns.")
+        with bench_col3:
+            st.error("**High Yield / Leveraged Watchlist**\n- Net Debt / EBITDA: $> 4.0x$\n- FCCR: $< 1.2x$\n- Quick Ratio: $< 0.6$\n- Refinancing and liquidity default risk.")
+
+    # ----------------------------------------------------
+    # TAB 3: HISTORICAL PERFORMANCE & RISK
+    # ----------------------------------------------------
+    with tab3:
         st.subheader("Historical Stock Performance & Institutional Risk Metrics")
         st.markdown(f"Ingested by **Agent 1 (Data Architect)** and processed by **Agent 3 (Quant Analyst)** (Optimization Mode: **{'🤖 ML Expected Returns' if use_ml_views else '📊 Historical Mean Returns'}**).")
 
@@ -382,9 +545,9 @@ def main():
         st.plotly_chart(fig_corr, use_container_width=True, config=PLOTLY_CONFIG)
 
     # ----------------------------------------------------
-    # TAB 3: PREDICTIVE ML RETURN FORECASTING (AGENT 4)
+    # TAB 4: PREDICTIVE ML RETURN FORECASTING (AGENT 4)
     # ----------------------------------------------------
-    with tab3:
+    with tab4:
         st.subheader("Predictive Machine Learning Return Forecasting")
         st.markdown(f"Engineered by **Agent 4 (Predictive ML Analyst)** using a **{ml_res.get('model_used', 'Random Forest Regressor')}** trained on technical features (14d RSI, 20d Volatility, 20d & 50d Momentum, Volume Trend).")
 
@@ -453,9 +616,9 @@ def main():
                 st.plotly_chart(fig_fi, use_container_width=True, config=PLOTLY_CONFIG)
 
     # ----------------------------------------------------
-    # TAB 4: PORTFOLIO OPTIMIZATION & VaR
+    # TAB 5: PORTFOLIO OPTIMIZATION & VaR
     # ----------------------------------------------------
-    with tab4:
+    with tab5:
         st.subheader("Modern Portfolio Theory (MPT) & Tail Risk Optimization")
         st.markdown(f"Calculated by **Agent 3 (Quantitative Analyst)** under **$R_f$ = {rf_rate_pct:.2f}%** and **Return Mode = {'🤖 Random Forest ML Forecasts' if use_ml_views else '📊 Empirical Historical Returns'}**.")
 
@@ -643,9 +806,9 @@ def main():
         )
 
     # ----------------------------------------------------
-    # TAB 5: GEMINI AI EXECUTIVE REPORT (OPTIONAL)
+    # TAB 6: GEMINI AI EXECUTIVE REPORT (OPTIONAL)
     # ----------------------------------------------------
-    with tab5:
+    with tab6:
         st.subheader("📝 Gemini AI Executive Investment Report")
         st.markdown("Generated by **Agent 5 (Gemini AI Executive Summarizer)** synthesizing outputs across all 4 analytical agents.")
 

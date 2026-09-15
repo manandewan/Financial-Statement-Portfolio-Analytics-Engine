@@ -11,12 +11,13 @@ from src.agents.coordinator import AgentSystemCoordinator
 
 class TestSuite20(unittest.TestCase):
     """
-    Comprehensive 20-Test Rigorous Validation Suite covering:
+    Comprehensive Rigorous Validation Suite covering:
     - Data Ingestion & Sanitization (Tests 1-3)
     - Fundamental Analysis & Edge Case Parsing (Tests 4-7)
-    - Quantitative Optimization, MPT, VaR & CVaR (Tests 8-15)
-    - Predictive Machine Learning & Feature Engineering (Tests 16-18)
-    - AI Report Synthesis & Pipeline Orchestration (Tests 19-20)
+    - Credit Worthiness, Coverage (FCCR) & Leverage (Tests 8-10)
+    - Quantitative Optimization, MPT, VaR & CVaR (Tests 11-18)
+    - Predictive Machine Learning & Feature Engineering (Tests 19-21)
+    - AI Report Synthesis & Pipeline Orchestration (Tests 22-23)
     """
 
     def setUp(self):
@@ -39,20 +40,68 @@ class TestSuite20(unittest.TestCase):
 
         self.sample_statements = {
             'AAPL': {
-                'income_statement': pd.DataFrame({'2024': {'Net Income': 100000, 'Total Revenue': 400000}}),
-                'balance_sheet': pd.DataFrame({'2024': {'Total Stockholder Equity': 500000, 'Total Debt': 200000, 'Current Assets': 150000, 'Current Liabilities': 100000}}),
-                'cash_flow': pd.DataFrame({'2024': {'Free Cash Flow': 90000, 'Operating Cash Flow': 110000, 'Capital Expenditure': -20000}}),
+                'income_statement': pd.DataFrame({
+                    '2024': {
+                        'Net Income': 100000, 
+                        'Total Revenue': 400000,
+                        'Normalized EBITDA': 150000,
+                        'Interest Expense': 10000,
+                        'Tax Provision': 25000
+                    }
+                }),
+                'balance_sheet': pd.DataFrame({
+                    '2024': {
+                        'Total Stockholder Equity': 500000, 
+                        'Total Debt': 200000, 
+                        'Cash And Cash Equivalents': 80000,
+                        'Current Assets': 150000, 
+                        'Current Liabilities': 100000,
+                        'Inventory': 30000
+                    }
+                }),
+                'cash_flow': pd.DataFrame({
+                    '2024': {
+                        'Free Cash Flow': 90000, 
+                        'Operating Cash Flow': 110000, 
+                        'Capital Expenditure': -20000,
+                        'Repayment Of Debt': -5000,
+                        'Operating Lease Payments': -2000
+                    }
+                }),
                 'info': {'marketCap': 2000000, 'sector': 'Technology'}
             },
             'MSFT': {
-                'income_statement': pd.DataFrame({'2024': {'Net Income': 80000, 'Total Revenue': 300000}}),
-                'balance_sheet': pd.DataFrame({'2024': {'Total Stockholder Equity': 400000, 'Total Debt': 300000, 'Current Assets': 120000, 'Current Liabilities': 80000}}),
-                'cash_flow': pd.DataFrame({'2024': {'Free Cash Flow': 70000, 'Operating Cash Flow': 90000, 'Capital Expenditure': -20000}}),
+                'income_statement': pd.DataFrame({
+                    '2024': {
+                        'Net Income': 80000, 
+                        'Total Revenue': 300000,
+                        'Normalized EBITDA': 120000,
+                        'Interest Expense': 5000,
+                        'Tax Provision': 18000
+                    }
+                }),
+                'balance_sheet': pd.DataFrame({
+                    '2024': {
+                        'Total Stockholder Equity': 400000, 
+                        'Total Debt': 100000, 
+                        'Cash And Cash Equivalents': 140000,  # Net cash surplus
+                        'Current Assets': 120000, 
+                        'Current Liabilities': 80000,
+                        'Inventory': 10000
+                    }
+                }),
+                'cash_flow': pd.DataFrame({
+                    '2024': {
+                        'Free Cash Flow': 70000, 
+                        'Operating Cash Flow': 90000, 
+                        'Capital Expenditure': -20000
+                    }
+                }),
                 'info': {'marketCap': 1800000, 'sector': 'Technology'}
             },
             'GOOGL': {
-                'income_statement': pd.DataFrame({'2024': {'Net Income': 70000, 'Total Revenue': 280000}}),
-                'balance_sheet': pd.DataFrame({'2024': {'Total Stockholder Equity': 350000, 'Total Debt': 100000, 'Current Assets': 180000, 'Current Liabilities': 90000}}),
+                'income_statement': pd.DataFrame({'2024': {'Net Income': 70000, 'Total Revenue': 280000, 'Normalized EBITDA': 95000}}),
+                'balance_sheet': pd.DataFrame({'2024': {'Total Stockholder Equity': 350000, 'Total Debt': 50000, 'Cash And Cash Equivalents': 70000, 'Current Assets': 180000, 'Current Liabilities': 90000}}),
                 'cash_flow': pd.DataFrame({'2024': {'Free Cash Flow': 60000, 'Operating Cash Flow': 75000, 'Capital Expenditure': -15000}}),
                 'info': {'marketCap': 1500000, 'sector': 'Communication Services'}
             }
@@ -74,8 +123,6 @@ class TestSuite20(unittest.TestCase):
         self.assertEqual(da.name, "Financial Data Architect")
 
     def test_02_data_architect_ticker_deduplication(self):
-        da = DataArchitectAgent()
-        # Test sanitization logic directly
         tickers = ['AAPL', 'aapl ', 'MSFT', 'GOOGL', 'msft']
         cleaned = list(dict.fromkeys([t.strip().upper() for t in tickers if t.strip()]))
         self.assertEqual(cleaned, ['AAPL', 'MSFT', 'GOOGL'])
@@ -86,7 +133,7 @@ class TestSuite20(unittest.TestCase):
             da.fetch_data([])
 
     # =========================================================================
-    # TESTS 4-7: FUNDAMENTAL ANALYST
+    # TESTS 4-7: FUNDAMENTAL ANALYST (EQUITY METRICS)
     # =========================================================================
     def test_04_fundamental_positive_ratios(self):
         fa = FundamentalAnalystAgent()
@@ -157,9 +204,51 @@ class TestSuite20(unittest.TestCase):
         self.assertAlmostEqual(res['free_cash_flow_yield'], 0.10, places=2)
 
     # =========================================================================
-    # TESTS 8-15: QUANT ANALYST, MPT & RISK
+    # TESTS 8-10: CREDIT WORTHINESS & SOLVENCY (LEVERAGE, COVERAGE, FCCR)
     # =========================================================================
-    def test_08_quant_single_asset_edge_case(self):
+    def test_08_credit_leverage_ratios(self):
+        fa = FundamentalAnalystAgent()
+        res = fa.analyze(self.raw_data)['credit_metrics']
+        aapl = res['AAPL']
+        # AAPL Total Debt: 200,000, Cash: 80,000, Net Debt = 120,000, EBITDA = 150,000
+        self.assertAlmostEqual(aapl['total_debt_to_ebitda'], 200000 / 150000, places=2)
+        self.assertAlmostEqual(aapl['net_debt_to_ebitda'], 120000 / 150000, places=2)
+        self.assertEqual(aapl['net_debt'], 120000.0)
+
+        # MSFT has Debt 100,000 and Cash 140,000 -> Net Cash Surplus (Net Debt = -40,000)
+        msft = res['MSFT']
+        self.assertLess(msft['net_debt'], 0)
+        self.assertIn("Net Cash Surplus", msft['credit_flags'])
+
+    def test_09_credit_coverage_and_fccr(self):
+        fa = FundamentalAnalystAgent()
+        res = fa.analyze(self.raw_data)['credit_metrics']
+        aapl = res['AAPL']
+        # EBITDA Interest Coverage: 150,000 / 10,000 = 15.0x
+        self.assertAlmostEqual(aapl['ebitda_interest_coverage'], 15.0, places=2)
+
+        # FCCR:
+        # Num: EBITDA (150k) - CapEx (20k) - Taxes (25k) = 105,000
+        # Denom: Interest (10k) + Principal Repayment (5k) + Lease Payments (2k) = 17,000
+        # Expected FCCR = 105,000 / 17,000 ≈ 6.176
+        expected_fccr = 105000 / 17000
+        self.assertAlmostEqual(aapl['fccr'], expected_fccr, places=2)
+        self.assertIn("Strong Fixed Charge Buffer (FCCR >= 3.0x)", aapl['credit_flags'])
+
+    def test_10_credit_liquidity_and_quick_ratio(self):
+        fa = FundamentalAnalystAgent()
+        res = fa.analyze(self.raw_data)['credit_metrics']
+        aapl = res['AAPL']
+        # CFO / Total Debt: 110,000 / 200,000 = 0.55 (55%)
+        self.assertAlmostEqual(aapl['cfo_to_total_debt'], 110000 / 200000, places=2)
+
+        # Quick Ratio: (Current Assets 150k - Inventory 30k) / Current Liab 100k = 1.20
+        self.assertAlmostEqual(aapl['quick_ratio'], 1.20, places=2)
+
+    # =========================================================================
+    # TESTS 11-18: QUANT ANALYST, MPT & RISK
+    # =========================================================================
+    def test_11_quant_single_asset_edge_case(self):
         single_data = {
             'prices': self.sample_prices[['AAPL']],
             'tickers': ['AAPL'],
@@ -172,7 +261,7 @@ class TestSuite20(unittest.TestCase):
         self.assertEqual(res['max_sharpe_portfolio']['weights']['AAPL'], 1.0)
         self.assertEqual(res['min_variance_portfolio']['weights']['AAPL'], 1.0)
 
-    def test_09_quant_weights_sum_to_one(self):
+    def test_12_quant_weights_sum_to_one(self):
         qa = QuantAnalystAgent()
         res = qa.optimize_portfolio(self.raw_data)
         ms_w = sum(res['max_sharpe_portfolio']['weights'].values())
@@ -180,12 +269,11 @@ class TestSuite20(unittest.TestCase):
         self.assertAlmostEqual(ms_w, 1.0, places=4)
         self.assertAlmostEqual(mv_w, 1.0, places=4)
 
-    def test_10_quant_sharpe_maximization(self):
+    def test_13_quant_sharpe_maximization(self):
         qa = QuantAnalystAgent(risk_free_rate=0.02)
         res = qa.optimize_portfolio(self.raw_data)
         ms_sr = res['max_sharpe_portfolio']['sharpe_ratio']
         
-        # Compare against equal weight portfolio
         eq_w = np.array([1/3, 1/3, 1/3])
         mean_rets = np.array(res['mean_returns'])
         cov = res['returns_df'].cov().values * 252
@@ -195,62 +283,58 @@ class TestSuite20(unittest.TestCase):
         
         self.assertGreaterEqual(ms_sr, eq_sr - 1e-4)
 
-    def test_11_quant_min_variance_portfolio(self):
+    def test_14_quant_min_variance_portfolio(self):
         qa = QuantAnalystAgent()
         res = qa.optimize_portfolio(self.raw_data)
         mv_vol = res['min_variance_portfolio']['volatility']
         individual_vols = [res['asset_metrics'][t]['annualized_volatility'] for t in self.raw_data['tickers']]
         self.assertLessEqual(mv_vol, max(individual_vols) + 1e-4)
 
-    def test_12_quant_risk_free_rate_shift(self):
+    def test_15_quant_risk_free_rate_shift(self):
         qa1 = QuantAnalystAgent(risk_free_rate=0.02)
         res1 = qa1.optimize_portfolio(self.raw_data)
         qa2 = QuantAnalystAgent(risk_free_rate=0.08)
         res2 = qa2.optimize_portfolio(self.raw_data)
-        # Higher risk-free rate results in lower numerical Sharpe for identical returns
         self.assertGreater(res1['max_sharpe_portfolio']['sharpe_ratio'], res2['max_sharpe_portfolio']['sharpe_ratio'])
 
-    def test_13_quant_return_multiplier_scaling(self):
+    def test_16_quant_return_multiplier_scaling(self):
         qa = QuantAnalystAgent()
         res_base = qa.optimize_portfolio(self.raw_data, return_multiplier=1.0)
         res_scaled = qa.optimize_portfolio(self.raw_data, return_multiplier=1.5)
-        # Expected return scales up
         self.assertGreater(res_scaled['max_sharpe_portfolio']['expected_return'], res_base['max_sharpe_portfolio']['expected_return'])
 
-    def test_14_quant_var_and_cvar_tail_property(self):
+    def test_17_quant_var_and_cvar_tail_property(self):
         qa = QuantAnalystAgent()
         res = qa.optimize_portfolio(self.raw_data)
         var95 = res['max_sharpe_portfolio']['var_95']
         cvar95 = res['max_sharpe_portfolio']['cvar_95']
-        # CVaR (expected shortfall in worst 5%) must be more negative or equal to VaR
         self.assertLessEqual(cvar95, var95 + 1e-5)
 
-    def test_15_quant_ml_views_integration(self):
+    def test_18_quant_ml_views_integration(self):
         qa = QuantAnalystAgent()
         ml_views = {'AAPL': 0.30, 'MSFT': 0.05, 'GOOGL': 0.02}
         res = qa.optimize_portfolio(self.raw_data, ml_return_forecasts=ml_views, use_ml_views=True)
         self.assertTrue(res['use_ml_views'])
-        # With AAPL having 30% forecast, AAPL should have the highest allocation in Max Sharpe
         self.assertGreater(res['max_sharpe_portfolio']['weights']['AAPL'], res['max_sharpe_portfolio']['weights']['GOOGL'])
 
     # =========================================================================
-    # TESTS 16-18: PREDICTIVE MACHINE LEARNING ANALYST
+    # TESTS 19-21: PREDICTIVE MACHINE LEARNING ANALYST
     # =========================================================================
-    def test_16_ml_rsi_and_volatility_features(self):
+    def test_19_ml_rsi_and_volatility_features(self):
         ml_agent = MLPredictiveAnalystAgent()
         feats = ml_agent.extract_features(self.sample_prices['AAPL'])
         self.assertIn('rsi_14', feats.columns)
         self.assertIn('volatility_20d', feats.columns)
         self.assertTrue((feats['rsi_14'] >= 0).all() and (feats['rsi_14'] <= 100).all())
 
-    def test_17_ml_feature_importances_sum(self):
+    def test_20_ml_feature_importances_sum(self):
         ml_agent = MLPredictiveAnalystAgent()
         res = ml_agent.predict(self.raw_data)
         for ticker in self.raw_data['tickers']:
             fi = res['ml_results'][ticker]['feature_importances']
             self.assertAlmostEqual(sum(fi.values()), 1.0, places=2)
 
-    def test_18_ml_prediction_keys(self):
+    def test_21_ml_prediction_keys(self):
         ml_agent = MLPredictiveAnalystAgent()
         res = ml_agent.predict(self.raw_data)
         self.assertIn('predicted_annualized_returns', res)
@@ -258,21 +342,22 @@ class TestSuite20(unittest.TestCase):
         self.assertIn('model_used', res)
 
     # =========================================================================
-    # TESTS 19-20: AI AGENT & SYSTEM COORDINATOR
+    # TESTS 22-23: AI AGENT & SYSTEM COORDINATOR
     # =========================================================================
-    def test_19_ai_agent_offline_mode(self):
+    def test_22_ai_agent_offline_mode(self):
         ai = AIPortfolioAnalystAgent(api_key="")
         report = ai.generate_report(self.raw_data)
         self.assertEqual(report['status'], 'offline')
         self.assertIn("Gemini", report['report'])
 
-    def test_20_coordinator_end_to_end(self):
+    def test_23_coordinator_end_to_end_with_credit(self):
         coord = AgentSystemCoordinator()
         coord.data_architect.fetch_data = lambda tickers, start_date, end_date: self.raw_data
         bundle = coord.run_pipeline(['AAPL', 'MSFT', 'GOOGL'], risk_free_rate=0.04, return_multiplier=1.1, use_ml_views=True)
         
         self.assertEqual(len(bundle['tickers']), 3)
         self.assertIn('fundamental', bundle)
+        self.assertIn('credit_metrics', bundle['fundamental'])
         self.assertIn('quant', bundle)
         self.assertIn('ml_predictive', bundle)
         self.assertIn('ai_report', bundle)

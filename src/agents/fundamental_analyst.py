@@ -8,12 +8,13 @@ logger = logging.getLogger("FundamentalAnalyst")
 class FundamentalAnalystAgent:
     """
     Agent 2: Fundamental Analyst
-    Equity Researcher responsible for extracting corporate health metrics:
-    - Debt-to-Equity Ratio
-    - Current Ratio
-    - Return on Equity (ROE)
-    - Free Cash Flow (FCF) Yield
-    Generates structured financial health metrics and warning flags for each asset.
+    Equity & Credit Researcher responsible for extracting:
+    - Fundamental Corporate Health: Debt-to-Equity, Current Ratio, ROE, FCF Yield
+    - Credit Worthiness & Solvency:
+      * Leverage: Total Debt / EBITDA, Net Debt / EBITDA
+      * Coverage: EBITDA / Interest Expense, Fixed Charge Coverage Ratio (FCCR)
+      * Liquidity / Solvency: CFO / Total Debt, Current Ratio, Quick Ratio
+    Generates structured metrics and credit risk flags for each asset.
     """
     def __init__(self):
         self.name = "Fundamental Analyst"
@@ -55,13 +56,14 @@ class FundamentalAnalystAgent:
 
     def analyze(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Ingest raw data from Data Architect and compute financial health metrics.
+        Ingest raw data from Data Architect and compute financial health & credit worthiness metrics.
         """
         statements = raw_data.get('statements', {})
         tickers = raw_data.get('tickers', [])
         prices_df = raw_data.get('prices', pd.DataFrame())
 
         metrics_summary = {}
+        credit_summary = {}
 
         sector_defaults = {
             'AAPL': 'Technology', 'MSFT': 'Technology', 'GOOGL': 'Communication Services',
@@ -78,7 +80,7 @@ class FundamentalAnalystAgent:
             cf = t_data.get('cash_flow', pd.DataFrame())
             info = t_data.get('info', {})
 
-            # Extract balance sheet metrics
+            # --- BALANCE SHEET ITEMS ---
             total_equity = self._get_item(bal, [
                 'Total Stockholder Equity', 'Stockholders Equity', 'Total Equity Gross Minority Interest', 
                 'Common Stock Equity', 'Total Equity', 'Total Stockholders Equity'
@@ -87,14 +89,21 @@ class FundamentalAnalystAgent:
                 'Total Debt', 'Long Term Debt', 'Total Liab', 'Total Liabilities Net Minority Interest',
                 'Long Term Debt And Capital Lease Obligation', 'Current Debt And Capital Lease Obligation'
             ])
+            cash_and_equivalents = self._get_item(bal, [
+                'Cash And Cash Equivalents', 'Cash Cash Equivalents And Short Term Investments',
+                'Cash Financial', 'Cash', 'Cash And Short Term Investments'
+            ])
             current_assets = self._get_item(bal, [
                 'Current Assets', 'Total Current Assets'
             ])
             current_liab = self._get_item(bal, [
                 'Current Liabilities', 'Total Current Liabilities'
             ])
+            inventory = self._get_item(bal, [
+                'Inventory', 'Total Inventory', 'Inventories'
+            ])
 
-            # Extract income statement metrics
+            # --- INCOME STATEMENT ITEMS ---
             net_income = self._get_item(inc, [
                 'Net Income', 'Net Income Common Stockholders', 'Net Income From Continuing Operation',
                 'Net Income From Continuing Operation Net Minority Interest'
@@ -102,8 +111,21 @@ class FundamentalAnalystAgent:
             revenue = self._get_item(inc, [
                 'Total Revenue', 'Operating Revenue', 'Gross Profit'
             ])
+            operating_income = self._get_item(inc, [
+                'Operating Income', 'Operating Revenue', 'EBIT'
+            ])
+            ebitda = self._get_item(inc, [
+                'Normalized EBITDA', 'EBITDA', 'Ebitda'
+            ])
+            interest_expense = self._get_item(inc, [
+                'Interest Expense', 'Interest Expense Non Operating', 'Total Interest Expense',
+                'Net Non Operating Interest Income Expense'
+            ])
+            tax_provision = self._get_item(inc, [
+                'Tax Provision', 'Income Tax Expense', 'Provision For Income Taxes'
+            ])
 
-            # Extract cash flow metrics
+            # --- CASH FLOW ITEMS ---
             free_cash_flow = self._get_item(cf, [
                 'Free Cash Flow', 'Free Cashflow'
             ])
@@ -113,13 +135,68 @@ class FundamentalAnalystAgent:
             capex = self._get_item(cf, [
                 'Capital Expenditure', 'Capital Expenditures', 'Investing Cash Flow'
             ])
+            depreciation = self._get_item(cf, [
+                'Reconciled Depreciation', 'Depreciation & Amortization', 'Depreciation Amortization Depletion',
+                'Depreciation And Amortization'
+            ])
+            taxes_paid = self._get_item(cf, [
+                'Income Tax Paid Supplemental Data', 'Cash Taxes Paid', 'Taxes Paid'
+            ])
+            principal_repayments = self._get_item(cf, [
+                'Repayment Of Debt', 'Long Term Debt Payments', 'Reduction Of Long Term Debt'
+            ])
+            lease_payments = self._get_item(cf, [
+                'Finance Lease Payments', 'Operating Lease Payments', 'Payment For Lease'
+            ])
 
-            # If FCF is missing directly, compute OCF - CapEx
+            # --- FALLBACK CALCULATIONS ---
+            # CapEx is usually negative in Cash Flow, take absolute
+            capex_abs = abs(capex) if not pd.isna(capex) else 0.0
+
+            # FCF fallback
             if pd.isna(free_cash_flow) and not pd.isna(operating_cash_flow):
                 if not pd.isna(capex):
-                    free_cash_flow = operating_cash_flow - abs(capex)
+                    free_cash_flow = operating_cash_flow - capex_abs
                 else:
                     free_cash_flow = operating_cash_flow
+
+            # EBITDA fallback: Operating Income + Depreciation or from yfinance info
+            if pd.isna(ebitda):
+                if not pd.isna(operating_income) and not pd.isna(depreciation):
+                    ebitda = operating_income + abs(depreciation)
+                elif not pd.isna(operating_income):
+                    ebitda = operating_income
+                elif 'ebitda' in info and info['ebitda'] is not None:
+                    ebitda = float(info['ebitda'])
+
+            # Cash Taxes fallback
+            cash_taxes = abs(taxes_paid) if not pd.isna(taxes_paid) else (abs(tax_provision) if not pd.isna(tax_provision) else 0.0)
+
+            # Interest Expense fallback
+            if pd.isna(interest_expense):
+                if 'interestExpense' in info and info['interestExpense'] is not None:
+                    interest_expense = abs(float(info['interestExpense']))
+                else:
+                    interest_expense = 0.0
+            else:
+                interest_expense = abs(interest_expense)
+
+            # Cash fallback
+            if pd.isna(cash_and_equivalents):
+                if 'totalCash' in info and info['totalCash'] is not None:
+                    cash_and_equivalents = float(info['totalCash'])
+                else:
+                    cash_and_equivalents = 0.0
+
+            # Debt fallback
+            if pd.isna(total_debt) and 'totalDebt' in info and info['totalDebt'] is not None:
+                total_debt = float(info['totalDebt'])
+            elif pd.isna(total_debt):
+                total_debt = 0.0
+
+            # Inventory fallback
+            if pd.isna(inventory):
+                inventory = 0.0
 
             # Fallbacks from yfinance info
             market_cap = info.get('marketCap', np.nan)
@@ -134,8 +211,6 @@ class FundamentalAnalystAgent:
 
             if pd.isna(total_equity) and 'bookValue' in info and 'sharesOutstanding' in info:
                 total_equity = info.get('bookValue', 0) * info.get('sharesOutstanding', 0)
-            if pd.isna(total_debt) and 'totalDebt' in info:
-                total_debt = info.get('totalDebt')
             if pd.isna(current_assets) and 'totalCurrentAssets' in info:
                 current_assets = info.get('totalCurrentAssets')
             if pd.isna(current_liab) and 'totalCurrentLiabilities' in info:
@@ -145,8 +220,10 @@ class FundamentalAnalystAgent:
             if pd.isna(free_cash_flow) and 'freeCashflow' in info:
                 free_cash_flow = info.get('freeCashflow')
 
-            # Calculate Ratios
-            # 1. Debt-to-Equity Ratio
+            # =========================================================
+            # 1. CORE FUNDAMENTAL RATIOS (EQUITY)
+            # =========================================================
+            # Debt-to-Equity Ratio
             if not pd.isna(total_debt) and not pd.isna(total_equity) and total_equity != 0:
                 debt_to_equity = float(total_debt / total_equity)
             elif 'debtToEquity' in info and info['debtToEquity'] is not None:
@@ -154,7 +231,7 @@ class FundamentalAnalystAgent:
             else:
                 debt_to_equity = np.nan
 
-            # 2. Current Ratio
+            # Current Ratio
             if not pd.isna(current_assets) and not pd.isna(current_liab) and current_liab != 0:
                 current_ratio = float(current_assets / current_liab)
             elif 'currentRatio' in info and info['currentRatio'] is not None:
@@ -162,7 +239,7 @@ class FundamentalAnalystAgent:
             else:
                 current_ratio = np.nan
 
-            # 3. Return on Equity (ROE)
+            # Return on Equity (ROE)
             if not pd.isna(net_income) and not pd.isna(total_equity) and total_equity != 0:
                 roe = float(net_income / total_equity)
             elif 'returnOnEquity' in info and info['returnOnEquity'] is not None:
@@ -170,13 +247,13 @@ class FundamentalAnalystAgent:
             else:
                 roe = np.nan
 
-            # 4. Free Cash Flow Yield
+            # Free Cash Flow Yield
             if not pd.isna(free_cash_flow) and not pd.isna(market_cap) and market_cap > 0:
                 fcf_yield = float(free_cash_flow / market_cap)
             else:
                 fcf_yield = np.nan
 
-            # Flags & Signals
+            # Equity Flags
             flags = []
             if not pd.isna(total_equity) and total_equity < 0:
                 flags.append("Negative Equity Deficit")
@@ -222,7 +299,119 @@ class FundamentalAnalystAgent:
                 'flags': flags
             }
 
+            # =========================================================
+            # 2. CREDIT WORTHINESS & SOLVENCY RATIOS
+            # =========================================================
+            # Net Debt = Total Debt - Cash & Cash Equivalents
+            net_debt = float(total_debt - cash_and_equivalents) if not pd.isna(total_debt) and not pd.isna(cash_and_equivalents) else np.nan
+
+            # A. LEVERAGE RATIOS
+            # Total Debt / EBITDA
+            if not pd.isna(total_debt) and not pd.isna(ebitda) and ebitda > 0:
+                total_debt_to_ebitda = float(total_debt / ebitda)
+            elif not pd.isna(total_debt) and total_debt == 0:
+                total_debt_to_ebitda = 0.0
+            else:
+                total_debt_to_ebitda = np.nan
+
+            # Net Debt / EBITDA
+            if not pd.isna(net_debt) and not pd.isna(ebitda) and ebitda > 0:
+                net_debt_to_ebitda = float(net_debt / ebitda)
+            elif not pd.isna(net_debt) and net_debt <= 0:
+                net_debt_to_ebitda = float(net_debt / ebitda) if not pd.isna(ebitda) and ebitda > 0 else 0.0
+            else:
+                net_debt_to_ebitda = np.nan
+
+            # B. COVERAGE RATIOS
+            # EBITDA / Interest Expense
+            if not pd.isna(ebitda) and not pd.isna(interest_expense) and interest_expense > 0:
+                ebitda_interest_coverage = float(ebitda / interest_expense)
+            elif not pd.isna(interest_expense) and interest_expense == 0:
+                ebitda_interest_coverage = 999.0  # Negligible interest burden
+            else:
+                ebitda_interest_coverage = np.nan
+
+            # Fixed Charge Coverage Ratio (FCCR):
+            # FCCR = (EBITDA - Maintenance CapEx - Cash Taxes) / (Interest Expense + Mandatory Principal Repayments + Lease Payments)
+            fccr_numerator = (ebitda if not pd.isna(ebitda) else 0.0) - capex_abs - cash_taxes
+            mand_repayments = abs(principal_repayments) if not pd.isna(principal_repayments) else 0.0
+            lease_pmts = abs(lease_payments) if not pd.isna(lease_payments) else 0.0
+            fccr_denominator = interest_expense + mand_repayments + lease_pmts
+
+            if fccr_denominator > 0:
+                fccr = float(fccr_numerator / fccr_denominator)
+            elif interest_expense == 0 and total_debt == 0:
+                fccr = 999.0  # Zero fixed charges
+            else:
+                fccr = np.nan
+
+            # C. LIQUIDITY / SOLVENCY RATIOS
+            # CFO / Total Debt
+            if not pd.isna(operating_cash_flow) and not pd.isna(total_debt) and total_debt > 0:
+                cfo_to_total_debt = float(operating_cash_flow / total_debt)
+            elif not pd.isna(total_debt) and total_debt == 0:
+                cfo_to_total_debt = 999.0  # Zero debt
+            else:
+                cfo_to_total_debt = np.nan
+
+            # Quick Ratio = (Current Assets - Inventory) / Current Liabilities
+            if not pd.isna(current_assets) and not pd.isna(current_liab) and current_liab > 0:
+                quick_assets = current_assets - inventory
+                quick_ratio = float(quick_assets / current_liab)
+            elif 'quickRatio' in info and info['quickRatio'] is not None:
+                quick_ratio = float(info['quickRatio'])
+            else:
+                quick_ratio = np.nan
+
+            # Credit Profile Flags & Classification
+            credit_flags = []
+            if net_debt is not None and net_debt < 0:
+                credit_flags.append("Net Cash Surplus")
+            elif not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda > 3.5:
+                credit_flags.append("High Leverage Warning (Net Debt/EBITDA > 3.5x)")
+            elif not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda <= 1.5:
+                credit_flags.append("Conservative Net Leverage (< 1.5x)")
+
+            if not pd.isna(fccr):
+                if fccr >= 3.0:
+                    credit_flags.append("Strong Fixed Charge Buffer (FCCR >= 3.0x)")
+                elif fccr < 1.2:
+                    credit_flags.append("Tight Debt Service Headroom (FCCR < 1.2x)")
+
+            if not pd.isna(cfo_to_total_debt) and cfo_to_total_debt >= 0.30:
+                credit_flags.append("Robust Cash Flow Repayment (CFO/Debt >= 30%)")
+
+            # Synthetic Credit Tier
+            if (net_debt < 0 or (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 2.0)) and (pd.isna(fccr) or fccr >= 2.5):
+                credit_rating_tier = "Prime / Investment Grade (IG)"
+            elif not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda > 4.0:
+                credit_rating_tier = "High Yield / Speculative Grade"
+            else:
+                credit_rating_tier = "Moderate Investment Grade / Crossover"
+
+            credit_summary[ticker] = {
+                'ebitda': ebitda,
+                'total_debt': total_debt,
+                'cash_and_equivalents': cash_and_equivalents,
+                'net_debt': net_debt,
+                'interest_expense': interest_expense,
+                'operating_cash_flow': operating_cash_flow,
+                'capex': capex_abs,
+                'cash_taxes': cash_taxes,
+                'inventory': inventory,
+                'total_debt_to_ebitda': total_debt_to_ebitda,
+                'net_debt_to_ebitda': net_debt_to_ebitda,
+                'ebitda_interest_coverage': ebitda_interest_coverage,
+                'fccr': fccr,
+                'cfo_to_total_debt': cfo_to_total_debt,
+                'current_ratio': current_ratio,
+                'quick_ratio': quick_ratio,
+                'credit_rating_tier': credit_rating_tier,
+                'credit_flags': credit_flags
+            }
+
         return {
             'metrics': metrics_summary,
+            'credit_metrics': credit_summary,
             'processed_count': len(metrics_summary)
         }
