@@ -334,7 +334,7 @@ def main():
         st.subheader("💳 Credit Worthiness, Debt Serviceability & Solvency")
         st.markdown("Evaluated by **Agent 2 (Fundamental & Credit Analyst)** assessing debt service capacity, leverage burden, and cash flow buffer under distress.")
 
-        st.info("ℹ️ **Methodology Notice: Synthetic Credit Ratings**: The letter ratings below are **Synthetic Credit Ratings (Damodaran Quantitative Framework)** estimated algorithmically from reported leverage (Net Debt / EBITDA), Fixed Charge Coverage (FCCR), and liquidity. They represent quantitative proxies for credit risk, not official credit opinions issued by S&P Global, Moody's, or Fitch Ratings.")
+        st.info("ℹ️ **Pure Financial Credit Metrics**: Evaluates reported leverage (Net Debt / EBITDA), coverage multiples (EBITDA / Interest Expense, FCCR), and cash flow solvency directly from SEC filings. Official agency ratings (S&P, Moody's, Fitch) are copyright-protected qualitative opinions issued by analyst committees and are not available via free public market feeds.")
 
         # Summary Table of Key Credit Ratios
         credit_table_data = []
@@ -364,7 +364,7 @@ def main():
             if pd.isna(ebitda_cov):
                 ebitda_cov_str = "N/A"
             elif ebitda_cov >= 50:
-                ebitda_cov_str = ">50.0x (Negligible Debt)"
+                ebitda_cov_str = ">50.0x (Prime Buffer)"
             else:
                 ebitda_cov_str = f"{ebitda_cov:.2f}x"
 
@@ -386,7 +386,6 @@ def main():
                 cfo_td_str = f"{cfo_td*100:.1f}%"
 
             qr = f"{cm.get('quick_ratio'):.2f}" if not pd.isna(cm.get('quick_ratio')) else "N/A"
-            synth_rating = cm.get('synthetic_credit_rating', 'Unrated')
             flags = ", ".join(cm.get('credit_flags', [])) if cm.get('credit_flags') else "Standard"
 
             credit_table_data.append({
@@ -399,8 +398,7 @@ def main():
                 "FCCR": fccr_str,
                 "CFO / Total Debt": cfo_td_str,
                 "Quick Ratio": qr,
-                "Synthetic Rating (S&P Equiv.)": synth_rating,
-                "Credit Signals": flags
+                "Credit Health Signals": flags
             })
 
         credit_df = pd.DataFrame(credit_table_data)
@@ -460,6 +458,7 @@ def main():
                 <li><b>1. EBITDA Ignores Mandatory Cash Outflows:</b> EBITDA represents pre-tax operating earnings before non-cash charges, but companies cannot service debt with gross earnings. EBITDA completely excludes <i>Cash Taxes</i>, required <i>Maintenance CapEx</i> (mandatory reinvestment just to keep the business operational), and working capital swings.</li>
                 <li><b>2. Interest Coverage Ignores Mandatory Non-Interest Debt Charges:</b> Standard interest coverage examines only the interest line on the Income Statement. It completely ignores contractual <i>Operating / Financing Lease Payments (rent)</i>, <i>Scheduled Mandatory Principal Amortization</i>, and debt maturity repayment obligations.</li>
             </ul>
+            <p><i>Note on Growth CapEx:</i> Reported CapEx in financial statements aggregates essential maintenance CapEx with discretionary growth CapEx (such as Amazon building AWS data centers or fulfillment hubs). Discretionary CapEx can be delayed or curtailed in distress, which is why analysts look at both gross interest coverage and net cash flow capacity.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -469,16 +468,16 @@ def main():
         """)
 
         # Key Credit Benchmarks Guide
-        st.markdown("### 🎯 Damodaran Synthetic Credit Rating Matrix & Institutional Benchmarks")
-        st.caption("Quantitative framework mapping financial ratios to estimated S&P / Moody's rating notches:")
+        st.markdown("### 🎯 Institutional Credit Underwriting Benchmarks")
+        st.caption("Standard institutional solvency ranges used by corporate credit risk analysts:")
         
         bench_col1, bench_col2, bench_col3 = st.columns(3)
         with bench_col1:
-            st.success("**Prime / Upper IG (AAA to A)**\n- Net Debt / EBITDA: $< 2.0x$\n- FCCR: $> 4.0x$\n- Quick Ratio: $> 1.0$\n- *Negligible default risk; vast liquidity reserves.*")
+            st.success("**Fortress Balance Sheet & High Liquidity**\n- Net Debt / EBITDA: $< 1.5x$\n- EBITDA Interest Coverage: $> 8.0x$\n- CFO / Total Debt: $> 30\%$\n- *Substantial liquidity reserves; minimal debt service risk.*")
         with bench_col2:
-            st.warning("**Lower IG to Crossover (BBB to BB)**\n- Net Debt / EBITDA: $2.0x - 4.0x$\n- FCCR: $1.5x - 3.5x$\n- Quick Ratio: $0.7 - 1.0$\n- *Adequate capacity; vulnerable to macro downcycles.*")
+            st.warning("**Moderate Leverage & Adequate Capacity**\n- Net Debt / EBITDA: $1.5x - 3.5x$\n- EBITDA Interest Coverage: $3.0x - 8.0x$\n- CFO / Total Debt: $15\% - 30\%$\n- *Adequate debt service capability; monitored during economic downturns.*")
         with bench_col3:
-            st.error("**Speculative / Junk (B to CCC)**\n- Net Debt / EBITDA: $> 4.5x$\n- FCCR: $< 1.2x$\n- Quick Ratio: $< 0.6$\n- *High leverage, elevated refinancing & default hazard.*")
+            st.error("**Elevated Leverage & Refinancing Exposure**\n- Net Debt / EBITDA: $> 4.0x$\n- EBITDA Interest Coverage: $< 2.5x$\n- CFO / Total Debt: $< 15\%$\n- *High sensitivity to interest rates, refinancing & debt maturity burden.*")
 
     # ----------------------------------------------------
     # TAB 3: HISTORICAL PERFORMANCE & RISK

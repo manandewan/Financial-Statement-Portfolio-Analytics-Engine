@@ -13,8 +13,8 @@ class FundamentalAnalystAgent:
     - Credit Worthiness & Solvency:
       * Leverage: Total Debt / EBITDA, Net Debt / EBITDA
       * Coverage: EBITDA / Interest Expense, Fixed Charge Coverage Ratio (FCCR)
-      * Liquidity / Solvency: CFO / Total Debt, Current Ratio, Quick Ratio
-      * Synthetic Credit Ratings: Quantitative S&P/Moody's equivalent notches (Damodaran Model)
+      * Profitability & Cash Generation: Return on Equity (ROE), Free Cash Flow Yield
+      * Credit Solvency & Debt Signals: Objective financial flags (Net Cash Surplus, Conservative Leverage, High Coverage, Cash Flow Repayment)
     Generates structured metrics and credit risk flags for each asset.
     """
     def __init__(self):
@@ -359,41 +359,20 @@ class FundamentalAnalystAgent:
             elif not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda <= 1.5:
                 credit_flags.append("Conservative Net Leverage (< 1.5x)")
 
+            if not pd.isna(ebitda_interest_coverage):
+                if ebitda_interest_coverage >= 10.0:
+                    credit_flags.append("Robust Interest Coverage (> 10x)")
+                elif ebitda_interest_coverage < 2.0:
+                    credit_flags.append("Low Interest Coverage (< 2.0x)")
+
             if not pd.isna(fccr):
                 if fccr >= 3.0:
                     credit_flags.append("Strong Fixed Charge Buffer (FCCR >= 3.0x)")
-                elif fccr < 1.2:
+                elif 0 <= fccr < 1.2:
                     credit_flags.append("Tight Debt Service Headroom (FCCR < 1.2x)")
 
             if not pd.isna(cfo_to_total_debt) and cfo_to_total_debt >= 0.30:
                 credit_flags.append("Robust Cash Flow Repayment (CFO/Debt >= 30%)")
-
-            # =========================================================
-            # D. DAMODARAN QUANTITATIVE SYNTHETIC CREDIT RATING NOTCH
-            # =========================================================
-            cov_effective = fccr if not pd.isna(fccr) and fccr != 999.0 else (ebitda_interest_coverage if not pd.isna(ebitda_interest_coverage) else 0.0)
-
-            if (net_debt < 0 or (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 0.8)) and (cov_effective >= 8.5 or ebitda_interest_coverage == 999.0):
-                synthetic_notch = "AAA (Synthetic)"
-                credit_rating_tier = "Prime / Investment Grade (IG)"
-            elif (net_debt < 0 or (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 1.5)) and cov_effective >= 6.0:
-                synthetic_notch = "AA (Synthetic)"
-                credit_rating_tier = "Prime / Investment Grade (IG)"
-            elif (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 2.5) and cov_effective >= 4.0:
-                synthetic_notch = "A (Synthetic)"
-                credit_rating_tier = "Upper Medium Investment Grade"
-            elif (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 3.5) and cov_effective >= 2.5:
-                synthetic_notch = "BBB (Synthetic - Lowest IG)"
-                credit_rating_tier = "Lower Medium Investment Grade"
-            elif (not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda < 4.5) and cov_effective >= 1.5:
-                synthetic_notch = "BB (Synthetic - High Yield)"
-                credit_rating_tier = "Speculative / High Yield"
-            elif cov_effective >= 0.8:
-                synthetic_notch = "B (Synthetic - High Yield)"
-                credit_rating_tier = "Highly Speculative"
-            else:
-                synthetic_notch = "CCC / Distress (Synthetic)"
-                credit_rating_tier = "Substantial Credit Risk"
 
             credit_summary[ticker] = {
                 'ebitda': ebitda,
@@ -412,10 +391,6 @@ class FundamentalAnalystAgent:
                 'cfo_to_total_debt': cfo_to_total_debt,
                 'current_ratio': current_ratio,
                 'quick_ratio': quick_ratio,
-                'credit_rating_tier': credit_rating_tier,
-                'synthetic_credit_rating': synthetic_notch,
-                'is_synthetic': True,
-                'methodology': "Damodaran Quantitative Interest Coverage & Leverage Framework",
                 'credit_flags': credit_flags
             }
 
