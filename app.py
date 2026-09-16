@@ -473,11 +473,11 @@ def main():
         
         bench_col1, bench_col2, bench_col3 = st.columns(3)
         with bench_col1:
-            st.success("**Fortress Balance Sheet & High Liquidity**\n- Net Debt / EBITDA: $< 1.5x$\n- EBITDA Interest Coverage: $> 8.0x$\n- CFO / Total Debt: $> 30\%$\n- *Substantial liquidity reserves; minimal debt service risk.*")
+            st.success("**Fortress Balance Sheet & High Liquidity**\n- Net Debt / EBITDA: $< 1.5x$\n- EBITDA Interest Coverage: $> 8.0x$\n- CFO / Total Debt: $> 30\\%$\n- *Substantial liquidity reserves; minimal debt service risk.*")
         with bench_col2:
-            st.warning("**Moderate Leverage & Adequate Capacity**\n- Net Debt / EBITDA: $1.5x - 3.5x$\n- EBITDA Interest Coverage: $3.0x - 8.0x$\n- CFO / Total Debt: $15\% - 30\%$\n- *Adequate debt service capability; monitored during economic downturns.*")
+            st.warning("**Moderate Leverage & Adequate Capacity**\n- Net Debt / EBITDA: $1.5x - 3.5x$\n- EBITDA Interest Coverage: $3.0x - 8.0x$\n- CFO / Total Debt: $15\\% - 30\\%$\n- *Adequate debt service capability; monitored during economic downturns.*")
         with bench_col3:
-            st.error("**Elevated Leverage & Refinancing Exposure**\n- Net Debt / EBITDA: $> 4.0x$\n- EBITDA Interest Coverage: $< 2.5x$\n- CFO / Total Debt: $< 15\%$\n- *High sensitivity to interest rates, refinancing & debt maturity burden.*")
+            st.error("**Elevated Leverage & Refinancing Exposure**\n- Net Debt / EBITDA: $> 4.0x$\n- EBITDA Interest Coverage: $< 2.5x$\n- CFO / Total Debt: $< 15\\%$\n- *High sensitivity to interest rates, refinancing & debt maturity burden.*")
 
     # ----------------------------------------------------
     # TAB 3: HISTORICAL PERFORMANCE & RISK
