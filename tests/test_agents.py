@@ -215,6 +215,21 @@ class TestSuite20(unittest.TestCase):
         self.assertAlmostEqual(aapl['net_debt_to_ebitda'], 120000 / 150000, places=2)
         self.assertEqual(aapl['net_debt'], 120000.0)
 
+        # LTV and Capital Structure
+        # EV = MarketCap (2M) + Debt (200k) - Cash (80k) = 2,120,000
+        expected_ltv = 200000 / 2120000
+        self.assertAlmostEqual(aapl['ltv'], expected_ltv, places=3)
+        self.assertIn("Ultra-Low LTV (< 15%)", aapl['credit_flags'])
+
+        # Debt to Capital: 200,000 / (200,000 + 500,000) = 28.57%
+        self.assertAlmostEqual(aapl['debt_to_capital'], 200000 / 700000, places=2)
+
+        # Debt to Assets: 200,000 / 700,000
+        self.assertAlmostEqual(aapl['debt_to_assets'], 200000 / 700000, places=2)
+
+        # Financial Leverage: 700,000 / 500,000 = 1.40x
+        self.assertAlmostEqual(aapl['financial_leverage'], 1.40, places=2)
+
         # MSFT has Debt 100,000 and Cash 140,000 -> Net Cash Surplus (Net Debt = -40,000)
         msft = res['MSFT']
         self.assertLess(msft['net_debt'], 0)

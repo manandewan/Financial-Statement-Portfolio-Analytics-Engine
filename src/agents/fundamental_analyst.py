@@ -94,6 +94,9 @@ class FundamentalAnalystAgent:
                 'Cash And Cash Equivalents', 'Cash Cash Equivalents And Short Term Investments',
                 'Cash Financial', 'Cash', 'Cash And Short Term Investments'
             ])
+            total_assets = self._get_item(bal, [
+                'Total Assets', 'Total Assets Net Minority Interest', 'Gross Assets'
+            ])
             current_assets = self._get_item(bal, [
                 'Current Assets', 'Total Current Assets'
             ])
@@ -220,6 +223,25 @@ class FundamentalAnalystAgent:
             if pd.isna(free_cash_flow) and 'freeCashflow' in info:
                 free_cash_flow = info.get('freeCashflow')
 
+            if pd.isna(total_assets):
+                if 'totalAssets' in info and info['totalAssets'] is not None:
+                    total_assets = float(info['totalAssets'])
+                elif not pd.isna(total_equity) and not pd.isna(total_debt):
+                    total_assets = float(total_debt + total_equity)
+                elif not pd.isna(current_assets):
+                    total_assets = float(current_assets)
+
+            enterprise_value = info.get('enterpriseValue')
+            if pd.isna(enterprise_value) or enterprise_value is None or enterprise_value <= 0:
+                if not pd.isna(market_cap) and market_cap > 0:
+                    c_val = cash_and_equivalents if not pd.isna(cash_and_equivalents) else 0.0
+                    d_val = total_debt if not pd.isna(total_debt) else 0.0
+                    enterprise_value = float(market_cap + d_val - c_val)
+                else:
+                    enterprise_value = np.nan
+            else:
+                enterprise_value = float(enterprise_value)
+
             # =========================================================
             # 1. CORE FUNDAMENTAL RATIOS (EQUITY)
             # =========================================================
@@ -299,7 +321,7 @@ class FundamentalAnalystAgent:
             # =========================================================
             net_debt = float(total_debt - cash_and_equivalents) if not pd.isna(total_debt) and not pd.isna(cash_and_equivalents) else np.nan
 
-            # A. LEVERAGE RATIOS
+            # A. LEVERAGE & CAPITAL STRUCTURE RATIOS
             if not pd.isna(total_debt) and not pd.isna(ebitda) and ebitda > 0:
                 total_debt_to_ebitda = float(total_debt / ebitda)
             elif not pd.isna(total_debt) and total_debt == 0:
@@ -313,6 +335,46 @@ class FundamentalAnalystAgent:
                 net_debt_to_ebitda = float(net_debt / ebitda) if not pd.isna(ebitda) and ebitda > 0 else 0.0
             else:
                 net_debt_to_ebitda = np.nan
+
+            # Market Loan-to-Value (LTV = Total Debt / Enterprise Value)
+            if not pd.isna(total_debt) and not pd.isna(enterprise_value) and enterprise_value > 0:
+                ltv = float(total_debt / enterprise_value)
+            elif not pd.isna(total_debt) and not pd.isna(market_cap) and (market_cap + total_debt) > 0:
+                ltv = float(total_debt / (market_cap + total_debt))
+            elif not pd.isna(total_debt) and total_debt == 0:
+                ltv = 0.0
+            else:
+                ltv = np.nan
+
+            # Net LTV (Net Debt / Enterprise Value)
+            if not pd.isna(net_debt) and not pd.isna(enterprise_value) and enterprise_value > 0:
+                net_ltv = float(net_debt / enterprise_value)
+            elif not pd.isna(net_debt) and net_debt <= 0:
+                net_ltv = 0.0
+            else:
+                net_ltv = np.nan
+
+            # Book LTV / Debt-to-Assets (Total Debt / Total Assets)
+            if not pd.isna(total_debt) and not pd.isna(total_assets) and total_assets > 0:
+                debt_to_assets = float(total_debt / total_assets)
+            elif not pd.isna(total_debt) and total_debt == 0:
+                debt_to_assets = 0.0
+            else:
+                debt_to_assets = np.nan
+
+            # Debt-to-Capitalization (Total Debt / [Total Debt + Total Stockholder Equity])
+            if not pd.isna(total_debt) and not pd.isna(total_equity) and (total_debt + total_equity) > 0:
+                debt_to_capital = float(total_debt / (total_debt + total_equity))
+            elif not pd.isna(total_debt) and total_debt == 0:
+                debt_to_capital = 0.0
+            else:
+                debt_to_capital = np.nan
+
+            # Financial Leverage Multiplier (Total Assets / Total Equity)
+            if not pd.isna(total_assets) and not pd.isna(total_equity) and total_equity > 0:
+                financial_leverage = float(total_assets / total_equity)
+            else:
+                financial_leverage = np.nan
 
             # B. COVERAGE RATIOS
             if not pd.isna(ebitda) and not pd.isna(interest_expense) and interest_expense > 0:
@@ -359,6 +421,20 @@ class FundamentalAnalystAgent:
             elif not pd.isna(net_debt_to_ebitda) and net_debt_to_ebitda <= 1.5:
                 credit_flags.append("Conservative Net Leverage (< 1.5x)")
 
+            if not pd.isna(ltv):
+                if 0 <= ltv < 0.15:
+                    credit_flags.append("Ultra-Low LTV (< 15%)")
+                elif 0.15 <= ltv < 0.30:
+                    credit_flags.append("Conservative LTV (< 30%)")
+                elif ltv > 0.60:
+                    credit_flags.append("High LTV Exposure (> 60%)")
+
+            if not pd.isna(debt_to_assets):
+                if 0 <= debt_to_assets < 0.25:
+                    credit_flags.append("Strong Asset Coverage (Debt/Assets < 25%)")
+                elif debt_to_assets > 0.65:
+                    credit_flags.append("High Asset Encumbrance (Debt/Assets > 65%)")
+
             if not pd.isna(ebitda_interest_coverage):
                 if ebitda_interest_coverage >= 10.0:
                     credit_flags.append("Robust Interest Coverage (> 10x)")
@@ -379,6 +455,9 @@ class FundamentalAnalystAgent:
                 'total_debt': total_debt,
                 'cash_and_equivalents': cash_and_equivalents,
                 'net_debt': net_debt,
+                'total_assets': total_assets,
+                'enterprise_value': enterprise_value,
+                'market_cap': market_cap,
                 'interest_expense': interest_expense,
                 'operating_cash_flow': operating_cash_flow,
                 'capex': capex_abs,
@@ -386,6 +465,11 @@ class FundamentalAnalystAgent:
                 'inventory': inventory,
                 'total_debt_to_ebitda': total_debt_to_ebitda,
                 'net_debt_to_ebitda': net_debt_to_ebitda,
+                'ltv': ltv,
+                'net_ltv': net_ltv,
+                'debt_to_assets': debt_to_assets,
+                'debt_to_capital': debt_to_capital,
+                'financial_leverage': financial_leverage,
                 'ebitda_interest_coverage': ebitda_interest_coverage,
                 'fccr': fccr,
                 'cfo_to_total_debt': cfo_to_total_debt,

@@ -525,10 +525,27 @@ def main():
             qr = f"{cm.get('quick_ratio'):.2f}" if not pd.isna(cm.get('quick_ratio')) else "N/A"
             flags = ", ".join(cm.get('credit_flags', [])) if cm.get('credit_flags') else "Standard"
 
+            # LTV & Capital Structure Multiples
+            ltv_val = cm.get('ltv')
+            ltv_str = f"{ltv_val*100:.1f}%" if not pd.isna(ltv_val) else "N/A"
+
+            da_val = cm.get('debt_to_assets')
+            da_str = f"{da_val*100:.1f}%" if not pd.isna(da_val) else "N/A"
+
+            dc_val = cm.get('debt_to_capital')
+            dc_str = f"{dc_val*100:.1f}%" if not pd.isna(dc_val) else "N/A"
+
+            fl_val = cm.get('financial_leverage')
+            fl_str = f"{fl_val:.2f}x" if not pd.isna(fl_val) else "N/A"
+
             credit_table_data.append({
                 "Ticker": t,
                 "Total Debt": tot_debt,
                 "Net Debt": net_debt_str,
+                "LTV (Market)": ltv_str,
+                "Debt / Assets": da_str,
+                "Debt / Capital": dc_str,
+                "Fin. Leverage": fl_str,
                 "Total Debt / EBITDA": td_ebitda,
                 "Net Debt / EBITDA": nd_ebitda_str,
                 "EBITDA / Int Exp": ebitda_cov_str,
@@ -543,11 +560,12 @@ def main():
 
         st.markdown("---")
 
-        # Comparative Credit Charts
+        # Comparative Credit & Leverage Charts
+        st.markdown("### 📊 Comprehensive Credit & Leverage Profiles")
         col_c1, col_c2 = st.columns(2)
 
         with col_c1:
-            st.markdown("### ⚖️ Leverage Profile: Total Debt vs. Net Debt to EBITDA")
+            st.markdown("#### ⚖️ Cash Flow Leverage: Total Debt vs. Net Debt to EBITDA")
             lev_data = []
             for t in tickers:
                 cm = credit_res.get(t, {})
@@ -567,7 +585,7 @@ def main():
             st.plotly_chart(fig_lev, use_container_width=True, config=PLOTLY_CONFIG)
 
         with col_c2:
-            st.markdown("### 🛡️ Coverage Profile: Interest Coverage vs. FCCR")
+            st.markdown("#### 🛡️ Debt Service Coverage: Interest Coverage vs. FCCR")
             cov_data = []
             for t in tickers:
                 cm = credit_res.get(t, {})
@@ -586,18 +604,76 @@ def main():
             fig_cov = lock_chart_for_mobile(fig_cov)
             st.plotly_chart(fig_cov, use_container_width=True, config=PLOTLY_CONFIG)
 
-        # Institutional Analyst Callout Box: Why Analysts Prefer FCCR over EBITDA Coverage
-        st.markdown("""
-        <div class="credit-box">
-            <h4 style="margin-top:0; color:#38BDF8;">📘 Why Institutional Analysts Prefer FCCR over EBITDA Interest Coverage</h4>
-            <p>While <b>EBITDA / Interest Expense</b> is widely quoted, institutional credit rating agencies (Moody's, S&P, Fitch) and commercial lenders strongly prefer the <b>Fixed Charge Coverage Ratio (FCCR)</b> for underwriting credit risk due to two structural flaws in EBITDA coverage:</p>
-            <ul>
-                <li><b>1. EBITDA Ignores Mandatory Cash Outflows:</b> EBITDA represents pre-tax operating earnings before non-cash charges, but companies cannot service debt with gross earnings. EBITDA completely excludes <i>Cash Taxes</i>, required <i>Maintenance CapEx</i> (mandatory reinvestment just to keep the business operational), and working capital swings.</li>
-                <li><b>2. Interest Coverage Ignores Mandatory Non-Interest Debt Charges:</b> Standard interest coverage examines only the interest line on the Income Statement. It completely ignores contractual <i>Operating / Financing Lease Payments (rent)</i>, <i>Scheduled Mandatory Principal Amortization</i>, and debt maturity repayment obligations.</li>
-            </ul>
-            <p><i>Note on Growth CapEx:</i> Reported CapEx in financial statements aggregates essential maintenance CapEx with discretionary growth CapEx (such as Amazon building AWS data centers or fulfillment hubs). Discretionary CapEx can be delayed or curtailed in distress, which is why analysts look at both gross interest coverage and net cash flow capacity.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        col_c3, col_c4 = st.columns(2)
+
+        with col_c3:
+            st.markdown("#### 🏛️ Asset Cushion: Market LTV (%) vs. Debt-to-Assets (Book LTV %)")
+            ltv_data = []
+            for t in tickers:
+                cm = credit_res.get(t, {})
+                ltv_pct = (cm.get('ltv', 0) or 0) * 100
+                da_pct = (cm.get('debt_to_assets', 0) or 0) * 100
+                ltv_data.append({"Ticker": t, "Metric": "Market LTV (%)", "Value": max(ltv_pct, 0)})
+                ltv_data.append({"Ticker": t, "Metric": "Debt / Assets (%)", "Value": max(da_pct, 0)})
+
+            ltv_df = pd.DataFrame(ltv_data)
+            fig_ltv = px.bar(
+                ltv_df, x="Ticker", y="Value", color="Metric", barmode="group",
+                title="Loan-to-Value & Asset Gearing (Lower is Safer; <25% is Fortress)",
+                labels={"Value": "Percentage (%)"},
+                color_discrete_map={"Market LTV (%)": "#00B4D8", "Debt / Assets (%)": "#7209B7"}
+            )
+            fig_ltv = lock_chart_for_mobile(fig_ltv)
+            st.plotly_chart(fig_ltv, use_container_width=True, config=PLOTLY_CONFIG)
+
+        with col_c4:
+            st.markdown("#### 🏗️ Capital Structure Gearing: Debt-to-Capital (%)")
+            cap_data = []
+            for t in tickers:
+                cm = credit_res.get(t, {})
+                dc_pct = (cm.get('debt_to_capital', 0) or 0) * 100
+                cap_data.append({"Ticker": t, "Debt / Capital (%)": max(dc_pct, 0)})
+
+            cap_df = pd.DataFrame(cap_data)
+            fig_cap = px.bar(
+                cap_df, x="Ticker", y="Debt / Capital (%)",
+                title="Debt-to-Capitalization (Debt / [Debt + Equity]; <35% is Conservative)",
+                labels={"Debt / Capital (%)": "Debt / Capital (%)"},
+                color="Debt / Capital (%)",
+                color_continuous_scale="Teal"
+            )
+            fig_cap = lock_chart_for_mobile(fig_cap)
+            st.plotly_chart(fig_cap, use_container_width=True, config=PLOTLY_CONFIG)
+
+        # Institutional Analyst Callout Boxes: FCCR & LTV / Capital Structure
+        col_box1, col_box2 = st.columns(2)
+
+        with col_box1:
+            st.markdown("""
+            <div class="credit-box">
+                <h4 style="margin-top:0; color:#38BDF8;">📘 Corporate LTV & Capital Structure Metrics</h4>
+                <p>Institutional lenders and syndicated loan desks assess solvency beyond earnings through structural balance-sheet coverage:</p>
+                <ul>
+                    <li><b>Market LTV (Total Debt / Enterprise Value):</b> Measures the percentage of total corporate enterprise value encumbered by debt. An LTV &lt; 20% indicates massive equity cushion and superior recovery prospects.</li>
+                    <li><b>Book LTV (Debt-to-Assets):</b> The balance sheet liquidation perspective: what share of total physical and intangible assets is claimed by creditors.</li>
+                    <li><b>Debt-to-Capitalization:</b> Measures the permanent capital mix ($Debt / [Debt + Equity]$), reflecting financial leverage risk.</li>
+                    <li><b>Financial Leverage Multiplier:</b> The DuPont asset multiplier ($Assets / Equity$).</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_box2:
+            st.markdown("""
+            <div class="credit-box">
+                <h4 style="margin-top:0; color:#38BDF8;">📘 Debt Service & Fixed Charge Coverage (FCCR)</h4>
+                <p>While <b>EBITDA / Interest</b> is widely quoted, institutional credit rating agencies (S&P, Moody's) prefer <b>FCCR</b> for underwriting:</p>
+                <ul>
+                    <li><b>EBITDA Ignores Mandatory Outflows:</b> EBITDA excludes required <i>Cash Taxes</i>, <i>Maintenance CapEx</i>, and working capital needs.</li>
+                    <li><b>Interest Coverage Ignores Non-Interest Charges:</b> Ignores contractual <i>Lease Payments (rent)</i> and <i>Mandatory Principal Repayments</i>.</li>
+                    <li><i>Note on Growth CapEx:</i> Reported CapEx includes discretionary growth investments (e.g. AWS AI data centers) that can be curtailed during liquidity crunches.</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
 
         st.markdown("#### Mathematical Definition of Fixed Charge Coverage Ratio (FCCR):")
         st.latex(r"""
@@ -610,11 +686,11 @@ def main():
         
         bench_col1, bench_col2, bench_col3 = st.columns(3)
         with bench_col1:
-            st.success("**Fortress Balance Sheet & High Liquidity**\n- Net Debt / EBITDA: $< 1.5x$\n- EBITDA Interest Coverage: $> 8.0x$\n- CFO / Total Debt: $> 30\\%$\n- *Substantial liquidity reserves; minimal debt service risk.*")
+            st.success("**Fortress Balance Sheet & High Liquidity**\n- Market LTV: $< 20\\%$\n- Debt / Assets: $< 30\\%$\n- Net Debt / EBITDA: $< 1.5x$\n- EBITDA Interest Coverage: $> 8.0x$\n- CFO / Total Debt: $> 30\\%$\n- *Substantial liquidity reserves; minimal debt service risk.*")
         with bench_col2:
-            st.warning("**Moderate Leverage & Adequate Capacity**\n- Net Debt / EBITDA: $1.5x - 3.5x$\n- EBITDA Interest Coverage: $3.0x - 8.0x$\n- CFO / Total Debt: $15\\% - 30\\%$\n- *Adequate debt service capability; monitored during economic downturns.*")
+            st.warning("**Moderate Leverage & Adequate Capacity**\n- Market LTV: $20\\% - 40\\%$\n- Debt / Assets: $30\\% - 50\\%$\n- Net Debt / EBITDA: $1.5x - 3.5x$\n- EBITDA Interest Coverage: $3.0x - 8.0x$\n- CFO / Total Debt: $15\\% - 30\\%$\n- *Adequate debt service capability; monitored during economic downturns.*")
         with bench_col3:
-            st.error("**Elevated Leverage & Refinancing Exposure**\n- Net Debt / EBITDA: $> 4.0x$\n- EBITDA Interest Coverage: $< 2.5x$\n- CFO / Total Debt: $< 15\\%$\n- *High sensitivity to interest rates, refinancing & debt maturity burden.*")
+            st.error("**Elevated Leverage & Refinancing Exposure**\n- Market LTV: $> 50\\%$\n- Debt / Assets: $> 60\\%$\n- Net Debt / EBITDA: $> 4.0x$\n- EBITDA Interest Coverage: $< 2.5x$\n- CFO / Total Debt: $< 15\\%$\n- *High sensitivity to interest rates, refinancing & debt maturity burden.*")
 
     # ----------------------------------------------------
     # TAB 3: HISTORICAL PERFORMANCE & RISK
