@@ -176,6 +176,30 @@ st.markdown("""
         color: #94A3B8;
         border: 1px solid rgba(148, 163, 184, 0.25);
     }
+    .styled-finance-table th.benchmark-col-green, .styled-finance-table td.benchmark-col-green {
+        color: #4ADE80;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+    }
+    .styled-finance-table th.benchmark-col-amber, .styled-finance-table td.benchmark-col-amber {
+        color: #FBBF24;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+    }
+    .styled-finance-table th.benchmark-col-red, .styled-finance-table td.benchmark-col-red {
+        color: #F87171;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+    }
+    .styled-finance-table td.formula-col {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.78rem;
+        color: #93C5FD;
+        white-space: nowrap;
+    }
 
     @media (max-width: 768px) {
         .main-header {
@@ -207,32 +231,53 @@ def render_styled_table(df: pd.DataFrame, wrap_cols=None, badge_cols=None) -> st
     html_out = ['<div class="responsive-table-wrapper"><table class="styled-finance-table">']
     html_out.append('<thead><tr>')
     for col in df.columns:
-        cls = 'wrap-col' if col in wrap_cols else ('ticker-col' if col == 'Ticker' else 'metric-col')
-        html_out.append(f'<th class="{cls}">{html.escape(str(col))}</th>')
+        col_str = str(col)
+        if col_str in wrap_cols:
+            cls = 'wrap-col'
+        elif col_str in ['Ticker', 'Credit Ratio']:
+            cls = 'ticker-col'
+        elif any(sym in col_str for sym in ['🟢', 'Prime']):
+            cls = 'benchmark-col-green'
+        elif any(sym in col_str for sym in ['🟡', 'Moderate']):
+            cls = 'benchmark-col-amber'
+        elif any(sym in col_str for sym in ['🔴', 'Caution', 'High Risk']):
+            cls = 'benchmark-col-red'
+        else:
+            cls = 'metric-col'
+        html_out.append(f'<th class="{cls}">{html.escape(col_str)}</th>')
     html_out.append('</tr></thead><tbody>')
 
     for _, row in df.iterrows():
         html_out.append('<tr>')
         for col in df.columns:
+            col_str = str(col)
             val = str(row[col])
-            if col in badge_cols:
+            if col_str in badge_cols:
                 badges = []
                 parts = [p.strip() for p in val.split(',') if p.strip()]
                 for p in parts:
                     p_lower = p.lower()
-                    if any(w in p_lower for w in ['tight', 'high leverage', 'low interest', 'negative', 'strain', 'warning', 'deficit', 'unprofitable']):
+                    if any(w in p_lower for w in ['tight', 'high leverage', 'low interest', 'negative', 'strain', 'warning', 'deficit', 'unprofitable', 'elevated', 'encumbrance']):
                         b_cls = 'signal-badge badge-warning'
-                    elif any(s in p_lower for s in ['conservative', 'robust', 'strong', 'prime', 'net cash', 'efficiency', 'high capital']):
+                    elif any(s in p_lower for s in ['conservative', 'robust', 'strong', 'prime', 'net cash', 'efficiency', 'high capital', 'ultra-low']):
                         b_cls = 'signal-badge badge-success'
                     else:
                         b_cls = 'signal-badge badge-neutral'
                     badges.append(f'<span class="{b_cls}">{html.escape(p)}</span>')
                 content = '<div class="badge-container">' + ' '.join(badges) + '</div>' if badges else html.escape(val)
                 html_out.append(f'<td class="wrap-col">{content}</td>')
-            elif col in wrap_cols:
+            elif col_str in wrap_cols:
                 html_out.append(f'<td class="wrap-col">{html.escape(val)}</td>')
-            elif col == 'Ticker':
+            elif col_str in ['Ticker', 'Credit Ratio']:
                 html_out.append(f'<td class="ticker-col">{html.escape(val)}</td>')
+            elif any(sym in col_str for sym in ['🟢', 'Prime']):
+                html_out.append(f'<td class="benchmark-col-green">{html.escape(val)}</td>')
+            elif any(sym in col_str for sym in ['🟡', 'Moderate']):
+                html_out.append(f'<td class="benchmark-col-amber">{html.escape(val)}</td>')
+            elif any(sym in col_str for sym in ['🔴', 'Caution', 'High Risk']):
+                html_out.append(f'<td class="benchmark-col-red">{html.escape(val)}</td>')
+            elif col_str == 'Formula':
+                html_out.append(f'<td class="formula-col"><code>{html.escape(val)}</code></td>')
             else:
                 html_out.append(f'<td class="metric-col">{html.escape(val)}</td>')
         html_out.append('</tr>')
@@ -406,10 +451,10 @@ def main():
                 "Ticker": t,
                 "Sector": m.get('sector', 'N/A'),
                 "Market Cap": mcap,
-                "Debt-to-Equity": de,
-                "Current Ratio": cr,
-                "Return on Equity (ROE)": roe,
-                "FCF Yield": fcf_y,
+                "Debt-to-Equity [<1.0x]": de,
+                "Current Ratio [>1.5x]": cr,
+                "Return on Equity (ROE) [>15%]": roe,
+                "FCF Yield [>3.0%]": fcf_y,
                 "Health Alerts": ", ".join(m.get('flags', [])) if m.get('flags') else "Normal"
             })
 
@@ -443,6 +488,15 @@ def main():
             )
             fig_de = lock_chart_for_mobile(fig_de)
             st.plotly_chart(fig_de, use_container_width=True, config=PLOTLY_CONFIG)
+
+        st.markdown("#### 🎯 Fundamental Equity Health Benchmarks")
+        f_b1, f_b2, f_b3 = st.columns(3)
+        with f_b1:
+            st.success("**🟢 Fortress Equity Health**\n- Debt-to-Equity: $< 1.0x$\n- Current Ratio: $\\ge 1.5x$\n- ROE: $> 15.0\\%$\n- FCF Yield: $> 3.5\\%$\n- *High capital return efficiency, self-funding growth, low bankruptcy risk.*")
+        with f_b2:
+            st.warning("**🟡 Moderate / Stable Range**\n- Debt-to-Equity: $1.0x - 2.5x$\n- Current Ratio: $1.0x - 1.5x$\n- ROE: $8.0\\% - 15.0\\%$\n- FCF Yield: $1.5\\% - 3.5\\%$\n- *Acceptable financial flexibility; typical for mature industrial or utility firms.*")
+        with f_b3:
+            st.error("**🔴 High Risk / Distress Signs**\n- Debt-to-Equity: $> 2.5x$ or Deficit\n- Current Ratio: $< 1.0x$\n- ROE: $< 0.0\\%$ (Net Losses)\n- FCF Yield: $< 0.0\\%$ (Cash Burn)\n- *Working capital deficit, sustained shareholder dilution, or debt overhang.*")
 
         st.markdown("---")
         st.subheader("Financial Statement Deep Dive")
@@ -542,16 +596,16 @@ def main():
                 "Ticker": t,
                 "Total Debt": tot_debt,
                 "Net Debt": net_debt_str,
-                "LTV (Market)": ltv_str,
-                "Debt / Assets": da_str,
-                "Debt / Capital": dc_str,
-                "Fin. Leverage": fl_str,
-                "Total Debt / EBITDA": td_ebitda,
-                "Net Debt / EBITDA": nd_ebitda_str,
-                "EBITDA / Int Exp": ebitda_cov_str,
-                "FCCR": fccr_str,
-                "CFO / Total Debt": cfo_td_str,
-                "Quick Ratio": qr,
+                "Market LTV [<20%]": ltv_str,
+                "Debt / Assets [<30%]": da_str,
+                "Debt / Capital [<35%]": dc_str,
+                "Fin. Leverage [<3.0x]": fl_str,
+                "Total Debt / EBITDA [<2.5x]": td_ebitda,
+                "Net Debt / EBITDA [<1.5x]": nd_ebitda_str,
+                "EBITDA / Int Exp [>8.0x]": ebitda_cov_str,
+                "FCCR [>2.5x]": fccr_str,
+                "CFO / Total Debt [>30%]": cfo_td_str,
+                "Quick Ratio [>1.0x]": qr,
                 "Credit Signals": flags
             })
 
@@ -682,8 +736,94 @@ def main():
 
         # Key Credit Benchmarks Guide
         st.markdown("### 🎯 Institutional Credit Underwriting Benchmarks")
-        st.caption("Standard institutional solvency ranges used by corporate credit risk analysts:")
-        
+        st.caption("Standard institutional solvency ranges, formulas, and target thresholds used by corporate credit risk analysts:")
+
+        credit_benchmark_rows = [
+            {
+                "Credit Ratio": "Market LTV",
+                "Formula": "Total Debt / Enterprise Value",
+                "🟢 Prime / Fortress": "< 20%",
+                "🟡 Moderate / IG": "20% - 40%",
+                "🔴 High Risk / Caution": "> 50%",
+                "Underwriting Purpose": "Share of enterprise value encumbered by debt; lower provides superior equity cushion for lenders."
+            },
+            {
+                "Credit Ratio": "Book LTV (Debt / Assets)",
+                "Formula": "Total Debt / Total Assets",
+                "🟢 Prime / Fortress": "< 25%",
+                "🟡 Moderate / IG": "25% - 45%",
+                "🔴 High Risk / Caution": "> 60%",
+                "Underwriting Purpose": "Balance sheet liquidation perspective; percentage of total corporate assets claimed by creditors."
+            },
+            {
+                "Credit Ratio": "Debt-to-Capitalization",
+                "Formula": "Total Debt / (Total Debt + Equity)",
+                "🟢 Prime / Fortress": "< 30%",
+                "🟡 Moderate / IG": "30% - 45%",
+                "🔴 High Risk / Caution": "> 55%",
+                "Underwriting Purpose": "Measures permanent capital structure gearing; proportion of firm capital financed via debt."
+            },
+            {
+                "Credit Ratio": "Financial Leverage Multiplier",
+                "Formula": "Total Assets / Stockholders' Equity",
+                "🟢 Prime / Fortress": "< 2.0x",
+                "🟡 Moderate / IG": "2.0x - 3.5x",
+                "🔴 High Risk / Caution": "> 4.5x or Deficit",
+                "Underwriting Purpose": "DuPont asset multiplier; magnifies equity returns but amplifies insolvency vulnerability."
+            },
+            {
+                "Credit Ratio": "Total Debt / EBITDA",
+                "Formula": "Total Debt / EBITDA",
+                "🟢 Prime / Fortress": "< 2.0x",
+                "🟡 Moderate / IG": "2.0x - 3.5x",
+                "🔴 High Risk / Caution": "> 4.5x",
+                "Underwriting Purpose": "Gross leverage multiple; years of pre-tax cash flow required to extinguish all debt obligations."
+            },
+            {
+                "Credit Ratio": "Net Debt / EBITDA",
+                "Formula": "(Total Debt - Cash & Equiv.) / EBITDA",
+                "🟢 Prime / Fortress": "< 1.5x (or Net Cash)",
+                "🟡 Moderate / IG": "1.5x - 3.0x",
+                "🔴 High Risk / Caution": "> 3.5x",
+                "Underwriting Purpose": "Core syndicated loan covenant; true net leverage assuming liquid cash immediately pays down debt."
+            },
+            {
+                "Credit Ratio": "EBITDA Interest Coverage",
+                "Formula": "EBITDA / Interest Expense",
+                "🟢 Prime / Fortress": "> 8.0x",
+                "🟡 Moderate / IG": "3.0x - 8.0x",
+                "🔴 High Risk / Caution": "< 2.5x",
+                "Underwriting Purpose": "Earnings headroom relative to contractual interest obligations; vulnerability to rate hikes."
+            },
+            {
+                "Credit Ratio": "Fixed Charge Coverage (FCCR)",
+                "Formula": "(EBITDA - Maint CapEx - Tax) / (Int + Principal + Leases)",
+                "🟢 Prime / Fortress": "> 3.0x",
+                "🟡 Moderate / IG": "1.5x - 3.0x",
+                "🔴 High Risk / Caution": "< 1.2x",
+                "Underwriting Purpose": "Comprehensive cash coverage after taxes and essential capex; gold standard for loan underwriting."
+            },
+            {
+                "Credit Ratio": "CFO / Total Debt",
+                "Formula": "Operating Cash Flow / Total Debt",
+                "🟢 Prime / Fortress": "> 35%",
+                "🟡 Moderate / IG": "15% - 35%",
+                "🔴 High Risk / Caution": "< 15%",
+                "Underwriting Purpose": "Annual operating cash generated relative to total debt; core rating agency cash flow adequacy test."
+            },
+            {
+                "Credit Ratio": "Quick Ratio (Acid Test)",
+                "Formula": "(Cash + ST Inv + Receivables) / Current Liabilities",
+                "🟢 Prime / Fortress": "> 1.0x",
+                "🟡 Moderate / IG": "0.8x - 1.0x",
+                "🔴 High Risk / Caution": "< 0.7x",
+                "Underwriting Purpose": "Immediate liquidity buffer; ability to extinguish near-term debt without liquidating inventory."
+            }
+        ]
+        credit_bench_df = pd.DataFrame(credit_benchmark_rows)
+        st.markdown(render_styled_table(credit_bench_df, wrap_cols=["Underwriting Purpose"]), unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
         bench_col1, bench_col2, bench_col3 = st.columns(3)
         with bench_col1:
             st.success("**Fortress Balance Sheet & High Liquidity**\n- Market LTV: $< 20\\%$\n- Debt / Assets: $< 30\\%$\n- Net Debt / EBITDA: $< 1.5x$\n- EBITDA Interest Coverage: $> 8.0x$\n- CFO / Total Debt: $> 30\\%$\n- *Substantial liquidity reserves; minimal debt service risk.*")
