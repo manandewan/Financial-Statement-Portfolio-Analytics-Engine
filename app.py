@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import datetime
 import json
 import os
+import html
 
 from src.agents.coordinator import AgentSystemCoordinator
 
@@ -85,13 +86,103 @@ st.markdown("""
         margin-bottom: 1.2rem;
     }
 
+    .responsive-table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #0F172A;
+        margin-top: 0.6rem;
+        margin-bottom: 1.2rem;
+    }
+    .styled-finance-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+        color: #F1F5F9;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .styled-finance-table th {
+        background: #1E293B;
+        color: #94A3B8;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.72rem;
+        letter-spacing: 0.05em;
+        padding: 10px 12px;
+        border-bottom: 2px solid #334155;
+        text-align: right;
+    }
+    .styled-finance-table th.ticker-col, .styled-finance-table th.wrap-col {
+        text-align: left;
+    }
+    .styled-finance-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #1E293B;
+        vertical-align: middle;
+    }
+    .styled-finance-table td.ticker-col {
+        font-weight: 700;
+        color: #38BDF8;
+        white-space: nowrap;
+        text-align: left;
+    }
+    .styled-finance-table td.metric-col {
+        white-space: nowrap;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+    .styled-finance-table td.wrap-col {
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        min-width: 280px;
+        max-width: 480px;
+        text-align: left;
+        line-height: 1.45;
+    }
+    .badge-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: center;
+    }
+    .signal-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 0.74rem;
+        font-weight: 500;
+        line-height: 1.3;
+        white-space: normal;
+    }
+    .badge-success {
+        background-color: rgba(34, 197, 94, 0.16);
+        color: #4ADE80;
+        border: 1px solid rgba(34, 197, 94, 0.35);
+    }
+    .badge-warning {
+        background-color: rgba(245, 158, 11, 0.16);
+        color: #FBBF24;
+        border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+    .badge-danger {
+        background-color: rgba(239, 68, 68, 0.16);
+        color: #F87171;
+        border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+    .badge-neutral {
+        background-color: rgba(148, 163, 184, 0.12);
+        color: #94A3B8;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
     @media (max-width: 768px) {
         .main-header {
             font-size: 1.4rem !important;
         }
         .sub-header {
             font-size: 0.85rem !important;
-            margin-bottom: 0.8rem !important;
         }
         .agent-pill {
             font-size: 0.65rem !important;
@@ -101,6 +192,52 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+
+def render_styled_table(df: pd.DataFrame, wrap_cols=None, badge_cols=None) -> str:
+    """
+    Renders a responsive, modern HTML table that properly wraps long text
+    and displays signals/alerts as styled badges rather than truncating them with ellipses.
+    """
+    if wrap_cols is None:
+        wrap_cols = []
+    if badge_cols is None:
+        badge_cols = []
+
+    html_out = ['<div class="responsive-table-wrapper"><table class="styled-finance-table">']
+    html_out.append('<thead><tr>')
+    for col in df.columns:
+        cls = 'wrap-col' if col in wrap_cols else ('ticker-col' if col == 'Ticker' else 'metric-col')
+        html_out.append(f'<th class="{cls}">{html.escape(str(col))}</th>')
+    html_out.append('</tr></thead><tbody>')
+
+    for _, row in df.iterrows():
+        html_out.append('<tr>')
+        for col in df.columns:
+            val = str(row[col])
+            if col in badge_cols:
+                badges = []
+                parts = [p.strip() for p in val.split(',') if p.strip()]
+                for p in parts:
+                    p_lower = p.lower()
+                    if any(w in p_lower for w in ['tight', 'high leverage', 'low interest', 'negative', 'strain', 'warning', 'deficit', 'unprofitable']):
+                        b_cls = 'signal-badge badge-warning'
+                    elif any(s in p_lower for s in ['conservative', 'robust', 'strong', 'prime', 'net cash', 'efficiency', 'high capital']):
+                        b_cls = 'signal-badge badge-success'
+                    else:
+                        b_cls = 'signal-badge badge-neutral'
+                    badges.append(f'<span class="{b_cls}">{html.escape(p)}</span>')
+                content = '<div class="badge-container">' + ' '.join(badges) + '</div>' if badges else html.escape(val)
+                html_out.append(f'<td class="wrap-col">{content}</td>')
+            elif col in wrap_cols:
+                html_out.append(f'<td class="wrap-col">{html.escape(val)}</td>')
+            elif col == 'Ticker':
+                html_out.append(f'<td class="ticker-col">{html.escape(val)}</td>')
+            else:
+                html_out.append(f'<td class="metric-col">{html.escape(val)}</td>')
+        html_out.append('</tr>')
+    html_out.append('</tbody></table></div>')
+    return ''.join(html_out)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -277,7 +414,7 @@ def main():
             })
 
         fund_df = pd.DataFrame(fund_table_data)
-        st.dataframe(fund_df, use_container_width=True, hide_index=True)
+        st.markdown(render_styled_table(fund_df, wrap_cols=["Health Alerts", "Sector"], badge_cols=["Health Alerts"]), unsafe_allow_html=True)
 
         # Comparative Metrics Bar Charts
         st.markdown("### Comparative Ratio Charts")
@@ -398,11 +535,11 @@ def main():
                 "FCCR": fccr_str,
                 "CFO / Total Debt": cfo_td_str,
                 "Quick Ratio": qr,
-                "Credit Health Signals": flags
+                "Credit Signals": flags
             })
 
         credit_df = pd.DataFrame(credit_table_data)
-        st.dataframe(credit_df, use_container_width=True, hide_index=True)
+        st.markdown(render_styled_table(credit_df, wrap_cols=["Credit Signals"], badge_cols=["Credit Signals"]), unsafe_allow_html=True)
 
         st.markdown("---")
 
