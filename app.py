@@ -8,6 +8,12 @@ import json
 import os
 import html
 
+import importlib
+import src.agents.coordinator
+try:
+    importlib.reload(src.agents.coordinator)
+except Exception:
+    pass
 from src.agents.coordinator import AgentSystemCoordinator
 
 # Page Configuration - Responsive & Mobile-Ready with Custom Logo
@@ -291,17 +297,22 @@ def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplie
     Cached helper to execute multi-agent coordinator pipeline.
     """
     coordinator = AgentSystemCoordinator(gemini_api_key=gemini_key)
-    return coordinator.run_pipeline(
-        tickers=list(tickers_tuple),
-        start_date=start_str,
-        end_date=end_str,
-        risk_free_rate=rf_rate,
-        return_multiplier=ret_multiplier,
-        use_ml_views=use_ml_views,
-        gemini_api_key=gemini_key,
-        shrink_returns=shrink_returns,
-        max_asset_weight=max_asset_weight
-    )
+    import inspect
+    sig = inspect.signature(coordinator.run_pipeline)
+    call_kwargs = {
+        'tickers': list(tickers_tuple),
+        'start_date': start_str,
+        'end_date': end_str,
+        'risk_free_rate': rf_rate,
+        'return_multiplier': ret_multiplier,
+        'use_ml_views': use_ml_views,
+        'gemini_api_key': gemini_key
+    }
+    if 'shrink_returns' in sig.parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        call_kwargs['shrink_returns'] = shrink_returns
+    if 'max_asset_weight' in sig.parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        call_kwargs['max_asset_weight'] = max_asset_weight
+    return coordinator.run_pipeline(**call_kwargs)
 
 def main():
     # Sidebar Configuration
