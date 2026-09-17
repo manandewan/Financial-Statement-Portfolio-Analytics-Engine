@@ -71,7 +71,10 @@ class FundamentalAnalystAgent:
             'GOOG': 'Communication Services', 'AMZN': 'Consumer Cyclical', 'NVDA': 'Technology',
             'TSLA': 'Consumer Cyclical', 'META': 'Communication Services', 'NFLX': 'Communication Services',
             'JPM': 'Financial Services', 'JNJ': 'Healthcare', 'PG': 'Consumer Defensive',
-            'WMT': 'Consumer Defensive', 'XOM': 'Energy', 'AMD': 'Technology', 'CRM': 'Technology'
+            'WMT': 'Consumer Defensive', 'XOM': 'Energy', 'AMD': 'Technology', 'CRM': 'Technology',
+            'RELIANCE.NS': 'Energy / Conglomerate', 'TCS.NS': 'Technology', 'INFY.NS': 'Technology',
+            'HDFCBANK.NS': 'Financial Services', 'ICICIBANK.NS': 'Financial Services', 'TATAMOTORS.NS': 'Automotive',
+            'RELIANCE.BO': 'Energy / Conglomerate', 'TCS.BO': 'Technology', 'INFY.BO': 'Technology'
         }
 
         for ticker in tickers:

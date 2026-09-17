@@ -313,6 +313,7 @@ def main():
         "Big Tech Leaders": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"],
         "Diversified Blue Chips": ["JPM", "JNJ", "PG", "WMT", "XOM"],
         "Growth & Tech": ["TSLA", "AMD", "META", "NFLX", "CRM"],
+        "Indian Blue Chips (Nifty 50)": ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"],
         "Custom Input": []
     }
 
@@ -325,6 +326,7 @@ def main():
         ticker_input = st.sidebar.text_input("Stock Tickers (comma-separated)", "AAPL, MSFT, GOOGL, AMZN, NVDA")
 
     ticker_list = [t.strip().upper() for t in ticker_input.split(",") if t.strip()]
+    st.sidebar.caption("🌐 *Supports Global & Indian securities (e.g. NSE: `RELIANCE.NS`, `TCS.NS` | BSE: `.BO`)*")
 
     # Date range selection
     col_s1, col_s2 = st.sidebar.columns(2)
@@ -443,13 +445,14 @@ def main():
     ai_report_res = data_bundle.get('ai_report', {})
 
     # Tabs Navigation (Including New Credit Worthiness & Solvency Tab)
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "🏢 Fundamental Health",
         "💳 Credit Worthiness & Solvency",
         "📊 Historical Performance & Risk",
         "🤖 ML Return Forecasting",
         "🎯 Portfolio Optimization & VaR",
-        "📝 Gemini AI Report"
+        "📝 Gemini AI Report",
+        "🔍 Methodology & Metadata Audit"
     ])
 
     # ----------------------------------------------------
@@ -1225,6 +1228,131 @@ def main():
 
         report_text = ai_report_res.get('report', 'No report generated.')
         st.markdown(report_text)
+
+    # ----------------------------------------------------
+    # TAB 7: METHODOLOGY & METADATA AUDIT TRAIL
+    # ----------------------------------------------------
+    with tab7:
+        st.subheader("🔍 Calculation Methodology & Metadata Audit Trail")
+        st.markdown(
+            "Complete data lineage, mathematical formulation, and model governance documentation "
+            "explaining exactly how every metric and ratio in this session was calculated."
+        )
+
+        # Section 1: System Run Provenance & Input Metadata
+        st.markdown("### 1. System Execution Metadata")
+        meta_col1, meta_col2, meta_col3 = st.columns(3)
+        with meta_col1:
+            st.markdown(f"**Execution Timestamp:** `{data_bundle.get('timestamp', 'N/A')}`")
+            st.markdown(f"**Tickers Analyzed:** `{', '.join(tickers)}`")
+            st.markdown(f"**Sample Window:** `{start_date}` to `{end_date}`")
+        with meta_col2:
+            st.markdown(f"**Trading Days Sampled:** `{len(data_bundle.get('prices', []))} days`")
+            st.markdown(f"**Risk-Free Rate Benchmark:** `{rf_rate*100:.2f}%`")
+            st.markdown(f"**Return Model:** `{'James-Stein Bayes Shrinkage' if shrink_returns else 'Empirical Historical'}`")
+        with meta_col3:
+            st.markdown(f"**Covariance Matrix:** `Ledoit-Wolf Constant Correlation Shrinkage`")
+            st.markdown(f"**Ledoit-Wolf Shrinkage Intensity (δ):** `{quant_res.get('shrinkage_intensity', 0.0):.4f}`")
+            st.markdown(f"**Max Asset Concentration Limit:** `{max_asset_weight*100.0 if max_asset_weight else 100.0:.1f}%`")
+
+        st.markdown("---")
+
+        # Section 2: Data Cadence & Lineage (Periodic SEC Filings vs Live Market Feeds)
+        st.markdown("### 2. Data Lineage & Hybrid Accounting Cadence")
+        st.info(
+            "**Institutional Hybrid Framework:** Financial statement disclosures (EBITDA, Debt, Cash Flow) are periodic "
+            "accounting records published quarterly (SEC Form 10-Q) and annually (Form 10-K). "
+            "Our engine pairs these periodic baselines with real-time equity pricing so market-implied leverage (e.g., Market LTV) "
+            "updates dynamically every trading session."
+        )
+
+        cadence_df = pd.DataFrame([
+            {"Metric Category": "Balance Sheet & Cash Flow", "Items Included": "EBITDA, Capex, Total Debt, Cash & Equivalents, Interest Expense", "Reporting Frequency": "Quarterly (10-Q) / Annual (10-K)", "Source Layer": "SEC EDGAR Financials via yfinance"},
+            {"Metric Category": "Live Market Valuation", "Items Included": "Stock Price, Market Capitalization, Enterprise Value", "Reporting Frequency": "Real-time / Daily Close", "Source Layer": "Live Market Feeds (Adj Close)"},
+            {"Metric Category": "Hybrid Solvency Metrics", "Items Included": "Market LTV, EV/EBITDA, Net Debt/Market Cap", "Reporting Frequency": "Daily Dynamic Refresh", "Source Layer": "Latest 10-Q Debt paired with Live Market Cap"},
+            {"Metric Category": "Quantitative Risk", "Items Included": "Sharpe, Sortino, Cornish-Fisher VaR/CVaR, Ledoit-Wolf Covariance", "Reporting Frequency": "Daily Log Return Ingestion", "Source Layer": "Adjusted Close Return Matrix (T x N)"}
+        ])
+        st.dataframe(cadence_df, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # Section 3: Exact Mathematical Formulations
+        st.markdown("### 3. Exact Mathematical Formulations & Derivations")
+
+        with st.expander("💳 Credit & Solvency Ratio Formulations", expanded=True):
+            st.markdown("""
+            - **Market Loan-to-Value (LTV):**
+              $$\\text{Market LTV} = \\frac{\\text{Total Debt}}{\\text{Market Capitalization (Live)} + \\text{Total Debt}}$$
+            - **Fixed Charge Coverage Ratio (FCCR):**
+              $$\\text{FCCR} = \\frac{\\text{EBITDA} - \\text{Capex} - \\text{Cash Taxes}}{\\text{Interest Expense} + \\text{Mandatory Principal Repayments} + \\text{Operating Lease Rents}}$$
+            - **Net Debt / EBITDA Multiple:**
+              $$\\text{Net Debt} = \\text{Total Debt} - \\text{Cash \\& Equivalents} \\implies \\text{Multiple} = \\frac{\\text{Net Debt}}{\\text{TTM EBITDA}}$$
+            - **EBITDA Interest Coverage:**
+              $$\\text{Interest Coverage} = \\frac{\\text{EBITDA}}{\\text{Interest Expense}}$$
+            - **Cash Flow from Operations (CFO) to Debt:**
+              $$\\text{CFO / Total Debt} = \\frac{\\text{Operating Cash Flow}}{\\text{Total Debt}}$$
+            """)
+
+        with st.expander("🎯 Quantitative Optimization & Tail Risk Formulations", expanded=True):
+            st.markdown("""
+            - **Modern Portfolio Theory (SLSQP Formulation):**
+              $$\\max_{\\mathbf{w}} \\frac{\\mathbf{w}^T \\boldsymbol{\\mu} - r_f}{\\sqrt{\\mathbf{w}^T \\boldsymbol{\\Sigma} \\mathbf{w}}} \\quad \\text{subject to} \\quad \\sum_{i=1}^N w_i = 1, \\quad 0 \\le w_i \\le w_{\\max}$$
+            - **Ledoit-Wolf Covariance Shrinkage:**
+              $$\\boldsymbol{\\Sigma}_{\\text{shrunk}} = (1 - \\delta) \\mathbf{S} + \\delta \\mathbf{F}$$
+              *(where $\\mathbf{S}$ is sample covariance, $\\mathbf{F}$ is constant-correlation target, and $\\delta$ is the Ledoit-Wolf optimal shrinkage intensity).*
+            - **James-Stein Return Regularization:**
+              $$\\boldsymbol{\\mu}_{\\text{JS}} = (1 - \\phi) \\bar{\\mathbf{r}} + \\phi \\mu_0 \\mathbf{1}$$
+              *(shrinks historical sample mean returns $\\bar{\\mathbf{r}}$ toward cross-sectional grand mean $\\mu_0$).*
+            - **Cornish-Fisher Modified Value at Risk (95% Annualized):**
+              $$z_{\\text{CF}} = z + \\frac{S}{6}(z^2 - 1) + \\frac{K}{24}(z^3 - 3z) - \\frac{S^2}{36}(2z^3 - 5z)$$
+              $$\\text{VaR}_{95\\%} = \\mu_{\\text{ann}} - z_{\\text{CF}} \\cdot \\sigma_{\\text{ann}}$$
+              *(accounts for non-normal empirical skewness $S$ and excess kurtosis $K$, avoiding naive $\\sqrt{252}$ scaling).*
+            """)
+
+        with st.expander("🤖 Machine Learning Predictive Alpha Pipeline", expanded=False):
+            st.markdown("""
+            - **Model Architecture:** Random Forest Regressor ($100$ estimators, maximum depth $5$, random state $42$).
+            - **Feature Engineering Vector:**
+              1. **RSI-14:** 14-day Relative Strength Index.
+              2. **Realized Volatility:** 20-day rolling standard deviation of log returns.
+              3. **Momentum:** 60-day price return.
+              4. **Volume Trend:** 20-day SMA volume / 60-day SMA volume.
+            - **Exponential Half-Life Alpha Decay:**
+              $$\\alpha_{\\text{decayed}} = \\hat{y} \\cdot e^{-\\frac{\\ln(2)}{T_{1/2}} \\cdot t} \\quad (T_{1/2} = 63 \\text{ trading days})$$
+            """)
+
+        # Section 4: Audit Export
+        st.markdown("---")
+        st.markdown("### 4. Download Complete Audit Trail Bundle")
+        audit_export = {
+            "execution_metadata": {
+                "timestamp": data_bundle.get("timestamp", datetime.datetime.now().isoformat()),
+                "tickers": tickers,
+                "start_date": start_date,
+                "end_date": end_date,
+                "total_trading_days": len(data_bundle.get("prices", []))
+            },
+            "parameters": {
+                "risk_free_rate": rf_rate,
+                "return_multiplier": ret_multiplier,
+                "use_ml_views": use_ml_views,
+                "shrink_returns": shrink_returns,
+                "max_asset_weight": max_asset_weight,
+                "ledoit_wolf_shrinkage_intensity": quant_res.get("shrinkage_intensity", 0.0)
+            },
+            "portfolio_allocations": {
+                "max_sharpe": quant_res.get("max_sharpe_portfolio", {}),
+                "min_variance": quant_res.get("min_variance_portfolio", {})
+            },
+            "credit_summary": credit_res.get("macro_credit_summary", {})
+        }
+
+        st.download_button(
+            label="📥 Download Full System Audit Trail (JSON)",
+            data=json.dumps(audit_export, indent=2, default=str),
+            file_name=f"audit_metadata_{datetime.date.today().isoformat()}.json",
+            mime="application/json"
+        )
 
 if __name__ == "__main__":
     main()

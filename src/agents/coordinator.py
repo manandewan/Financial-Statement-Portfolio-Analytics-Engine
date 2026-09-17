@@ -38,7 +38,8 @@ class AgentSystemCoordinator:
         use_ml_views: bool = False,
         gemini_api_key: str = None,
         shrink_returns: bool = False,
-        max_asset_weight: float = None
+        max_asset_weight: float = None,
+        **kwargs
     ) -> Dict[str, Any]:
         """
         Execute full multi-agent workflow with dynamic expected return, risk-free rate, and ML return views.
