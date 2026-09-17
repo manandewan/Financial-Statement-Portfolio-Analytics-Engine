@@ -994,6 +994,15 @@ def main():
         with col_m4:
             st.metric("Portfolio 95% VaR (Ann.)", f"{max_sharpe.get('var_95', 0)*100:.2f}%")
 
+        if max_sharpe['expected_return'] > 0.25 or max_sharpe['volatility'] > 0.30:
+            st.warning(
+                f"⚠️ **Institutional Sanity Check — High Volatility & Historical Backtest Distortion**\n\n"
+                f"- **Absurdly High Expected Return ({max_sharpe['expected_return']*100:.2f}%) vs. Benchmark Norms:** Standard broad equity benchmarks (e.g., S&P 500) average roughly 10%–12% annualized returns with 15%–18% volatility. A projected return >25% mathematically occurs only when one or more underlying assets experienced explosive gains during the historical test period (e.g. crypto, leveraged tech, or high-beta momentum stocks).\n"
+                f"- **'Empirical Historical Returns' Rearview-Mirror Bias:** In empirical return mode, the optimizer linearly extrapolates past extraordinary bull runs into the future without mean-reversion dampening or forward-looking Capital Market Assumptions (CMAs).\n"
+                f"- **Extreme Volatility ({max_sharpe['volatility']*100:.2f}%) & Ordinary Sharpe ({max_sharpe['sharpe_ratio']:.2f}):** A Sharpe ratio around 1.0–1.2 is conventional, not extraordinary. The high absolute return is driven purely by taking on massive raw volatility rather than superior risk-adjusted alpha.\n"
+                f"- **Severe Tail Risk (95% VaR: {max_sharpe.get('var_95', 0)*100:.2f}%):** In adverse market regimes (the worst 5% of annual outcomes), this asset mix faces severe drawdowns that could erase over half to two-thirds of portfolio capital."
+            )
+
         st.markdown("---")
 
         # Efficient Frontier Plotly Scatter Plot with Capital Allocation Line (CAL)
