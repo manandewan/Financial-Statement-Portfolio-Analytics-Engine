@@ -355,6 +355,16 @@ class TestSuite20(unittest.TestCase):
             self.assertLess(st['Loss Numeric'], 0.0)
         self.assertTrue(res['shrink_returns'])
 
+    def test_18d_quant_max_asset_weight_constraint(self):
+        qa = QuantAnalystAgent()
+        # raw_data has 3 assets: AAPL, MSFT, GOOGL. Cap at 40% (0.40)
+        res = qa.optimize_portfolio(self.raw_data, max_asset_weight=0.40)
+        ms_w = res['max_sharpe_portfolio']['weights']
+        for t, w in ms_w.items():
+            self.assertLessEqual(w, 0.40 + 1e-4)
+        self.assertAlmostEqual(sum(ms_w.values()), 1.0, places=4)
+        self.assertAlmostEqual(res['max_asset_weight'], 0.40, places=2)
+
     # =========================================================================
     # TESTS 19-21: PREDICTIVE MACHINE LEARNING ANALYST
     # =========================================================================

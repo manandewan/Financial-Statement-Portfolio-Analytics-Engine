@@ -324,11 +324,13 @@ class QuantAnalystAgent:
         return_multiplier: float = 1.0,
         ml_return_forecasts: Dict[str, float] = None,
         use_ml_views: bool = False,
-        shrink_returns: bool = False
+        shrink_returns: bool = False,
+        max_asset_weight: float = None
     ) -> Dict[str, Any]:
         """
         Compute optimal portfolio allocations, Efficient Frontier, and dynamic parameter adjustments.
-        Supports ML-enhanced Black-Litterman expected return views and James-Stein return shrinkage.
+        Supports ML-enhanced Black-Litterman expected return views, James-Stein return shrinkage,
+        and institutional concentration caps (max_asset_weight).
         """
         if risk_free_rate is not None:
             self.risk_free_rate = risk_free_rate
@@ -353,7 +355,12 @@ class QuantAnalystAgent:
         returns_df = metrics_res['returns_df']
 
         init_weights = np.array([1.0 / num_assets] * num_assets)
-        bounds = tuple((0.0, 1.0) for _ in range(num_assets))
+        if max_asset_weight is not None and num_assets > 1:
+            effective_max_w = float(min(1.0, max(max_asset_weight, 1.0 / num_assets)))
+        else:
+            effective_max_w = 1.0
+
+        bounds = tuple((0.0, effective_max_w) for _ in range(num_assets))
         constraints = ({'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0})
 
         if num_assets == 1:
@@ -439,8 +446,12 @@ class QuantAnalystAgent:
 
             np.random.seed(42)
             for i in range(num_simulations):
-                w = np.random.random(num_assets)
+                w = np.random.exponential(scale=1.0, size=num_assets)
                 w /= np.sum(w)
+                if effective_max_w < 0.99:
+                    for _ in range(5):
+                        w = np.minimum(w, effective_max_w)
+                        w /= np.sum(w)
                 r, v, s = self._portfolio_performance(w, mean_returns, cov_matrix)
                 mc_returns[i] = r
                 mc_volatilities[i] = v
@@ -511,6 +522,7 @@ class QuantAnalystAgent:
             },
             'stress_tests': stress_tests,
             'shrink_returns': shrink_returns,
+            'max_asset_weight': effective_max_w,
             'correlation_matrix': corr_matrix.to_dict(),
             'shrinkage_intensity': metrics_res.get('shrinkage_intensity', 0.0),
             'risk_free_rate': self.risk_free_rate,

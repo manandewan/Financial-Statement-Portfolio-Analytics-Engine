@@ -286,7 +286,7 @@ def render_styled_table(df: pd.DataFrame, wrap_cols=None, badge_cols=None) -> st
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplier, use_ml_views, gemini_key, shrink_returns=False):
+def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplier, use_ml_views, gemini_key, shrink_returns=False, max_asset_weight=None):
     """
     Cached helper to execute multi-agent coordinator pipeline.
     """
@@ -299,7 +299,8 @@ def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplie
         return_multiplier=ret_multiplier,
         use_ml_views=use_ml_views,
         gemini_api_key=gemini_key,
-        shrink_returns=shrink_returns
+        shrink_returns=shrink_returns,
+        max_asset_weight=max_asset_weight
     )
 
 def main():
@@ -350,8 +351,19 @@ def main():
                                        help="Replaces static historical returns with Supervised ML forward return forecasts inside the Modern Portfolio Theory (MPT) optimizer.")
 
     # James-Stein Return Regularization Toggle
-    shrink_returns = st.sidebar.checkbox("🛡️ Apply James-Stein Return Regularization", value=False,
+    shrink_returns = st.sidebar.checkbox("🛡️ Apply James-Stein Return Regularization", value=True,
                                         help="Applies Bayes-Stein shrinkage to pull noisy, extreme historical sample returns toward the 10% market equilibrium prior, dampening Michaud error-maximization.")
+
+    # Maximum Asset Allocation Limit (Concentration Cap)
+    max_weight_pct = st.sidebar.slider(
+        "Max Asset Position Limit (%)", 
+        min_value=20, 
+        max_value=100, 
+        value=35, 
+        step=5,
+        help="Institutional concentration limit per asset (default: 35%). Prevents single-stock 100% corner solutions and enforces true multi-asset risk diversification to eliminate massive portfolio variance."
+    )
+    max_asset_weight = max_weight_pct / 100.0 if max_weight_pct < 100 else None
 
     # Optional Gemini API Key
     st.sidebar.markdown("---")
@@ -383,20 +395,23 @@ def main():
 
     # Pipeline Agent Badge Indicator
     st.markdown("""
-    <div>
-        <span class="agent-pill pill-data">Agent 1: Financial Data Architect</span>
-        <span class="agent-pill pill-fund">Agent 2: Fundamental Analyst</span>
-        <span class="agent-pill pill-credit">Credit Worthiness: FCCR & Solvency</span>
-        <span class="agent-pill pill-quant">Agent 3: Quantitative Analyst</span>
-        <span class="agent-pill pill-ml">Agent 4: Predictive ML Analyst</span>
-        <span class="agent-pill pill-ai">Agent 5: Gemini AI Summarizer</span>
-        <span class="agent-pill pill-dev">Agent 6: Full-Stack Developer</span>
+    <div class="agent-indicator-bar">
+        <span class="agent-pill">Data Ingestion: Complete</span>
+        <span class="agent-pill">Fundamental Analytics: Complete</span>
+        <span class="agent-pill">Credit Worthiness & Solvency: Complete</span>
+        <span class="agent-pill">Predictive ML: Complete</span>
+        <span class="agent-pill">Quant MPT & Tail Risk: Complete</span>
+        <span class="agent-pill">Executive Synthesis: Ready</span>
     </div>
-    <br>
     """, unsafe_allow_html=True)
 
+    # Validation Checks
     if not ticker_list:
-        st.warning("Please enter at least one stock ticker in the sidebar to run analysis.")
+        st.error("Please provide at least one valid stock ticker symbol.")
+        st.stop()
+
+    if start_date >= end_date:
+        st.error("Start Date must precede End Date.")
         st.stop()
 
     # Execution Trigger
@@ -410,7 +425,8 @@ def main():
                 ret_multiplier=ret_multiplier,
                 use_ml_views=use_ml_views,
                 gemini_key=gemini_key,
-                shrink_returns=shrink_returns
+                shrink_returns=shrink_returns,
+                max_asset_weight=max_asset_weight
             )
         except Exception as e:
             st.error(f"Error running pipeline: {str(e)}")
@@ -981,8 +997,8 @@ def main():
     # TAB 5: PORTFOLIO OPTIMIZATION & VaR
     # ----------------------------------------------------
     with tab5:
-        st.subheader("Modern Portfolio Theory (MPT) & Tail Risk Optimization")
-        st.markdown(f"Calculated by **Agent 3 (Quantitative Analyst)** under **$R_f$ = {rf_rate_pct:.2f}%** and **Return Mode = {'🤖 Random Forest ML Forecasts' if use_ml_views else '📊 Empirical Historical Returns'}**.")
+        active_cap_str = f"{quant_res.get('max_asset_weight', 1.0)*100:.0f}% per asset" if quant_res.get('max_asset_weight', 1.0) < 0.99 else "Unconstrained (100%)"
+        st.markdown(f"Calculated by **Agent 3 (Quantitative Analyst)** under **$R_f$ = {rf_rate_pct:.2f}%**, **Return Mode = {'🤖 Random Forest ML Forecasts' if use_ml_views else '📊 Empirical Historical Returns'}**, and **Position Cap = {active_cap_str}**.")
 
         max_sharpe = quant_res['max_sharpe_portfolio']
         min_var = quant_res['min_variance_portfolio']
