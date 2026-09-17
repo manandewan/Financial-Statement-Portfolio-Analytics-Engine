@@ -321,10 +321,10 @@ def main():
     st.sidebar.title("⚙️ Dashboard Controls")
 
     preset_options = {
+        "Indian Blue Chips (Nifty 50)": ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"],
         "Big Tech Leaders": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"],
         "Diversified Blue Chips": ["JPM", "JNJ", "PG", "WMT", "XOM"],
         "Growth & Tech": ["TSLA", "AMD", "META", "NFLX", "CRM"],
-        "Indian Blue Chips (Nifty 50)": ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"],
         "Custom Input": []
     }
 
@@ -334,7 +334,7 @@ def main():
         default_tickers = preset_options[selected_preset]
         ticker_input = st.sidebar.text_input("Stock Tickers (comma-separated)", ", ".join(default_tickers))
     else:
-        ticker_input = st.sidebar.text_input("Stock Tickers (comma-separated)", "AAPL, MSFT, GOOGL, AMZN, NVDA")
+        ticker_input = st.sidebar.text_input("Stock Tickers (comma-separated)", "RELIANCE.NS, TCS.NS, HDFCBANK.NS, INFY.NS, ICICIBANK.NS")
 
     ticker_list = [t.strip().upper() for t in ticker_input.split(",") if t.strip()]
     st.sidebar.caption("🌐 *Supports Global & Indian securities (e.g. NSE: `RELIANCE.NS`, `TCS.NS` | BSE: `.BO`)*")
@@ -350,8 +350,9 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 📊 Quantitative & ML Settings")
     
-    # Risk-free rate
-    rf_rate_pct = st.sidebar.slider("Risk-Free Rate ($R_f$ %)", min_value=0.0, max_value=12.0, value=4.0, step=0.25)
+    # Risk-free rate (defaults to 6.8% for Indian G-Sec if Indian preset is chosen, else 4.0% for US Treasuries)
+    default_rf = 6.8 if "Indian" in selected_preset else 4.0
+    rf_rate_pct = st.sidebar.slider("Risk-Free Rate ($R_f$ %)", min_value=0.0, max_value=12.0, value=default_rf, step=0.25)
     rf_rate = rf_rate_pct / 100.0
 
     # Expected Return Adjustment Slider
