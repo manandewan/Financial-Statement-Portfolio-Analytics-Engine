@@ -69,6 +69,31 @@ class QuantAnalystAgent:
 
         return var_1d, cvar_1d, var_ann, cvar_ann
 
+    @staticmethod
+    def calculate_downside_metrics(daily_returns: pd.Series, rf_rate: float = 0.04) -> Tuple[float, float, float]:
+        """
+        Calculates Downside Deviation, Sortino Ratio, and Maximum Drawdown.
+        Downside deviation measures variance of returns falling below the risk-free benchmark.
+        Returns:
+            (downside_volatility, sortino_ratio, max_drawdown)
+        """
+        s = daily_returns.dropna()
+        if s.empty or len(s) < 5:
+            return 0.0, 0.0, 0.0
+
+        rf_daily = rf_rate / 252.0
+        excess = s - rf_daily
+        downside_diff = np.minimum(excess, 0.0)
+        downside_vol = float(np.sqrt(np.mean(downside_diff**2)) * np.sqrt(252.0))
+        mean_excess = float(excess.mean() * 252.0)
+        sortino = float(mean_excess / (downside_vol + 1e-8)) if downside_vol > 1e-6 else 0.0
+
+        cum = (1.0 + s).cumprod()
+        peak = cum.cummax()
+        dd = (cum - peak) / (peak + 1e-8)
+        max_dd = float(dd.min())
+        return downside_vol, sortino, max_dd
+
     def calculate_asset_metrics(
         self, 
         prices_df: pd.DataFrame, 
@@ -132,11 +157,18 @@ class QuantAnalystAgent:
 
             sharpe = (ann_return - self.risk_free_rate) / (ann_vol + 1e-8) if ann_vol > 0 else 0
 
+            if ticker in returns_df.columns and not returns_df[ticker].empty:
+                downside_vol, sortino, ind_max_dd = self.calculate_downside_metrics(daily_rets, self.risk_free_rate)
+            else:
+                downside_vol, sortino, ind_max_dd = 0.0, 0.0, 0.0
+
             asset_metrics[ticker] = {
                 'cagr': float(cagr),
                 'annualized_return': float(ann_return),
                 'annualized_volatility': float(ann_vol),
                 'sharpe_ratio': float(sharpe),
+                'sortino_ratio': float(sortino),
+                'downside_volatility': float(downside_vol),
                 'max_drawdown': float(max_drawdown),
                 'var_95': float(var_95),
                 'cvar_95': float(cvar_95),
@@ -145,7 +177,22 @@ class QuantAnalystAgent:
             }
             mean_returns_dict[ticker] = ann_return
 
-        cov_matrix = returns_df.cov() * 252 if not returns_df.empty else pd.DataFrame(np.eye(len(tickers)), index=tickers, columns=tickers)
+        # Covariance Matrix: Ledoit-Wolf Shrinkage for optimal conditioning and noise reduction
+        shrinkage_intensity = 0.0
+        if not returns_df.empty and len(tickers) >= 2 and len(returns_df) >= 10:
+            try:
+                from sklearn.covariance import ledoit_wolf
+                lw_cov, shrink = ledoit_wolf(returns_df.values)
+                cov_matrix = pd.DataFrame(lw_cov * 252.0, index=tickers, columns=tickers)
+                shrinkage_intensity = float(shrink)
+            except Exception as e:
+                logger.warning(f"Ledoit-Wolf covariance shrinkage fallback: {e}")
+                cov_matrix = returns_df.cov() * 252.0
+        elif not returns_df.empty:
+            cov_matrix = returns_df.cov() * 252.0
+        else:
+            cov_matrix = pd.DataFrame(np.eye(len(tickers)), index=tickers, columns=tickers)
+
         corr_matrix = returns_df.corr() if not returns_df.empty else pd.DataFrame(np.eye(len(tickers)), index=tickers, columns=tickers)
         mean_returns_series = pd.Series(mean_returns_dict)
 
@@ -154,7 +201,8 @@ class QuantAnalystAgent:
             'mean_returns': mean_returns_series,
             'cov_matrix': cov_matrix,
             'corr_matrix': corr_matrix,
-            'returns_df': returns_df
+            'returns_df': returns_df,
+            'shrinkage_intensity': shrinkage_intensity
         }
 
     def _portfolio_performance(self, weights: np.ndarray, mean_returns: np.ndarray, cov_matrix: np.ndarray) -> Tuple[float, float, float]:
@@ -307,12 +355,16 @@ class QuantAnalystAgent:
         # Calculate Max Sharpe Portfolio VaR & CVaR (1-Day and 1-Year Cornish-Fisher)
         ms_daily_returns = returns_df.dot(max_sharpe_weights) if not returns_df.empty else pd.Series([0.0])
         ms_v1d, ms_cv1d, ms_var95, ms_cvar95 = self.calculate_var_cvar(ms_daily_returns, alpha=0.05)
+        ms_dvol, ms_sortino, ms_max_dd = self.calculate_downside_metrics(ms_daily_returns, self.risk_free_rate)
 
         max_sharpe_dict = {
             'weights': {tickers[i]: float(max_sharpe_weights[i]) for i in range(num_assets)},
             'expected_return': float(max_sharpe_ret),
             'volatility': float(max_sharpe_vol),
             'sharpe_ratio': float(max_sharpe_sr),
+            'sortino_ratio': float(ms_sortino),
+            'downside_volatility': float(ms_dvol),
+            'max_drawdown': float(ms_max_dd),
             'var_95': float(ms_var95),
             'cvar_95': float(ms_cvar95),
             'var_95_1d': float(ms_v1d),
@@ -322,12 +374,16 @@ class QuantAnalystAgent:
         # Min Variance Portfolio VaR & CVaR
         mv_daily_returns = returns_df.dot(min_var_weights) if not returns_df.empty else pd.Series([0.0])
         mv_v1d, mv_cv1d, mv_var95, mv_cvar95 = self.calculate_var_cvar(mv_daily_returns, alpha=0.05)
+        mv_dvol, mv_sortino, mv_max_dd = self.calculate_downside_metrics(mv_daily_returns, self.risk_free_rate)
 
         min_var_dict = {
             'weights': {tickers[i]: float(min_var_weights[i]) for i in range(num_assets)},
             'expected_return': float(min_var_ret),
             'volatility': float(min_var_vol),
             'sharpe_ratio': float(min_var_sr),
+            'sortino_ratio': float(mv_sortino),
+            'downside_volatility': float(mv_dvol),
+            'max_drawdown': float(mv_max_dd),
             'var_95': float(mv_var95),
             'cvar_95': float(mv_cvar95),
             'var_95_1d': float(mv_v1d),
@@ -352,6 +408,7 @@ class QuantAnalystAgent:
                 'sharpe_ratios': mc_sharpe
             },
             'correlation_matrix': corr_matrix.to_dict(),
+            'shrinkage_intensity': metrics_res.get('shrinkage_intensity', 0.0),
             'risk_free_rate': self.risk_free_rate,
             'return_multiplier': return_multiplier,
             'use_ml_views': use_ml_views

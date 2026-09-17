@@ -983,7 +983,7 @@ def main():
         mc = quant_res['monte_carlo']
         ef = quant_res['efficient_frontier']
 
-        # Highlight Metric Cards
+        # Highlight Metric Cards: Return, Volatility, Sharpe & Asymmetric Downside Risk
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
             st.metric("Max Sharpe Expected Return", f"{max_sharpe['expected_return']*100:.2f}%")
@@ -992,7 +992,18 @@ def main():
         with col_m3:
             st.metric("Max Sharpe Ratio", f"{max_sharpe['sharpe_ratio']:.2f}")
         with col_m4:
-            st.metric("Portfolio 95% VaR (Ann.)", f"{max_sharpe.get('var_95', 0)*100:.2f}%")
+            st.metric("Sortino Ratio (Downside)", f"{max_sharpe.get('sortino_ratio', 0):.2f}", help="Excess return divided by downside deviation below the risk-free rate.")
+
+        col_m5, col_m6, col_m7, col_m8 = st.columns(4)
+        with col_m5:
+            st.metric("1-Day 95% VaR", f"{max_sharpe.get('var_95_1d', 0)*100:.2f}%", help="Empirical 1-day 95% Value at Risk.")
+        with col_m6:
+            st.metric("1-Year 95% VaR (CF)", f"{max_sharpe.get('var_95', 0)*100:.2f}%", help="Annualized 95% Value at Risk via Cornish-Fisher expansion.")
+        with col_m7:
+            st.metric("Historical Max Drawdown", f"{max_sharpe.get('max_drawdown', 0)*100:.2f}%", help="Peak-to-trough historical drawdown of the synthesized portfolio.")
+        with col_m8:
+            lw_int = quant_res.get('shrinkage_intensity', 0.0)
+            st.metric("Ledoit-Wolf Shrinkage (δ*)", f"{lw_int:.3f}", help="Optimal shrinkage intensity regularizing the sample covariance matrix against noise.")
 
         if max_sharpe['expected_return'] > 0.25 or max_sharpe['volatility'] > 0.30:
             st.warning(

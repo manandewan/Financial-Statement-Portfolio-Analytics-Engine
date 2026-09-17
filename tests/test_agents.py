@@ -332,6 +332,18 @@ class TestSuite20(unittest.TestCase):
         self.assertTrue(res['use_ml_views'])
         self.assertGreater(res['max_sharpe_portfolio']['weights']['AAPL'], res['max_sharpe_portfolio']['weights']['GOOGL'])
 
+    def test_18b_quant_downside_and_shrinkage(self):
+        qa = QuantAnalystAgent()
+        res = qa.optimize_portfolio(self.raw_data)
+        ms = res['max_sharpe_portfolio']
+        self.assertIn('sortino_ratio', ms)
+        self.assertIn('downside_volatility', ms)
+        self.assertIn('max_drawdown', ms)
+        self.assertIn('shrinkage_intensity', res)
+        self.assertGreaterEqual(res['shrinkage_intensity'], 0.0)
+        self.assertLessEqual(res['shrinkage_intensity'], 1.0)
+        self.assertLessEqual(ms['max_drawdown'], 0.0)
+
     # =========================================================================
     # TESTS 19-21: PREDICTIVE MACHINE LEARNING ANALYST
     # =========================================================================
