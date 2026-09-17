@@ -134,7 +134,18 @@ class MLPredictiveAnalystAgent:
 
             # Latest 20-day return forecast
             predicted_20d_ret = float(model.predict(X.iloc[[-1]])[0])
-            predicted_ann_ret = (1.0 + predicted_20d_ret) ** (252.0 / 20.0) - 1.0
+
+            # Institutional Alpha Annualization with Information Half-Life Decay:
+            # Rather than unrealistically compounding (1+r)^(252/20) with zero mean reversion,
+            # we apply exponential half-life decay (half-life = 20 trading days) integrated over 252 days:
+            kappa = float(np.log(2.0) / 20.0)
+            decay_mult = float((1.0 - np.exp(-252.0 * kappa)) / (20.0 * kappa))  # ≈ 1.44
+            alpha_annualized = float(predicted_20d_ret * decay_mult)
+
+            # Anchor with unconditional baseline return (clamped to realistic capital market assumptions)
+            daily_returns = prices.pct_change().dropna()
+            base_ret = float(np.clip(daily_returns.mean() * 252.0, -0.10, 0.20)) if not daily_returns.empty else 0.08
+            predicted_ann_ret = float(np.clip(base_ret + alpha_annualized, -0.35, 0.45))
 
             # Feature Importance
             if hasattr(model, 'feature_importances_'):

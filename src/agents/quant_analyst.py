@@ -17,6 +17,58 @@ class QuantAnalystAgent:
         self.name = "Quantitative Analyst"
         self.risk_free_rate = risk_free_rate
 
+    @staticmethod
+    def calculate_var_cvar(
+        returns_series: pd.Series, 
+        alpha: float = 0.05
+    ) -> Tuple[float, float, float, float]:
+        """
+        Calculates mathematically sound 1-day empirical and 1-year Cornish-Fisher / Gaussian
+        Value at Risk (VaR) and Conditional VaR (Expected Shortfall / CVaR).
+        Returns:
+            (var_1d, cvar_1d, var_annual, cvar_annual)
+        """
+        s = returns_series.dropna()
+        if s.empty or len(s) < 5:
+            return 0.0, 0.0, 0.0, 0.0
+
+        # 1-Day Non-Parametric Empirical VaR & CVaR
+        var_1d = float(np.percentile(s, alpha * 100))
+        tail_losses = s[s <= var_1d]
+        cvar_1d = float(tail_losses.mean()) if not tail_losses.empty else var_1d
+
+        # 1-Year Horizon (T = 252) Cornish-Fisher Expansion
+        # Note: Square root scaling applies to volatility, NOT raw percentiles!
+        mean_d = float(s.mean())
+        std_d = float(s.std())
+        if std_d < 1e-8:
+            return var_1d, cvar_1d, mean_d * 252.0, mean_d * 252.0
+
+        mean_ann = mean_d * 252.0
+        std_ann = std_d * np.sqrt(252.0)
+
+        n = len(s)
+        skew = float(s.skew()) if n >= 8 else 0.0
+        kurt = float(s.kurt()) if n >= 8 else 0.0
+
+        # Standard normal quantile for alpha (e.g. z ≈ 1.64485 for 95%)
+        z = float(norm.ppf(1.0 - alpha))
+
+        # Cornish-Fisher expansion adjustment for non-normality
+        z_cf = z + (skew / 6.0) * (z**2 - 1.0) + (kurt / 24.0) * (z**3 - 3.0 * z) - (skew**2 / 36.0) * (2.0 * z**3 - 5.0 * z)
+        z_cf = float(np.clip(z_cf, 1.0, 4.0))
+
+        var_ann = float(mean_ann - z_cf * std_ann)
+
+        # Expected Shortfall (CVaR)
+        tail_factor = float(norm.pdf(z) / alpha)
+        cvar_ann = float(mean_ann - max(tail_factor, z_cf + 0.3) * std_ann)
+
+        if cvar_ann > var_ann:
+            cvar_ann = var_ann - 0.01
+
+        return var_1d, cvar_1d, var_ann, cvar_ann
+
     def calculate_asset_metrics(
         self, 
         prices_df: pd.DataFrame, 
@@ -63,15 +115,20 @@ class QuantAnalystAgent:
                 drawdown = (cum_rets - peak) / (peak + 1e-8)
                 max_drawdown = float(drawdown.min())
 
-                # 95% Historical Value at Risk (VaR) & Conditional VaR (CVaR)
-                var_95 = float(np.percentile(daily_rets, 5) * np.sqrt(252))
-                cvar_95 = float(daily_rets[daily_rets <= np.percentile(daily_rets, 5)].mean() * np.sqrt(252))
+                # Mathematically sound VaR & CVaR (1-Day Empirical + 1-Year Cornish-Fisher Expansion)
+                v1d, cv1d, v_ann, cv_ann = self.calculate_var_cvar(daily_rets, alpha=0.05)
+                var_95 = v_ann
+                cvar_95 = cv_ann
+                var_95_1d = v1d
+                cvar_95_1d = cv1d
             else:
                 ann_return = 0.0
                 ann_vol = 1e-4
                 max_drawdown = 0.0
                 var_95 = 0.0
                 cvar_95 = 0.0
+                var_95_1d = 0.0
+                cvar_95_1d = 0.0
 
             sharpe = (ann_return - self.risk_free_rate) / (ann_vol + 1e-8) if ann_vol > 0 else 0
 
@@ -82,7 +139,9 @@ class QuantAnalystAgent:
                 'sharpe_ratio': float(sharpe),
                 'max_drawdown': float(max_drawdown),
                 'var_95': float(var_95),
-                'cvar_95': float(cvar_95)
+                'cvar_95': float(cvar_95),
+                'var_95_1d': float(var_95_1d),
+                'cvar_95_1d': float(cvar_95_1d)
             }
             mean_returns_dict[ticker] = ann_return
 
@@ -245,10 +304,9 @@ class QuantAnalystAgent:
             mc_volatilities = mc_volatilities.tolist()
             mc_sharpe = mc_sharpe.tolist()
 
-        # Calculate Max Sharpe Portfolio VaR & CVaR
+        # Calculate Max Sharpe Portfolio VaR & CVaR (1-Day and 1-Year Cornish-Fisher)
         ms_daily_returns = returns_df.dot(max_sharpe_weights) if not returns_df.empty else pd.Series([0.0])
-        ms_var95 = float(np.percentile(ms_daily_returns, 5) * np.sqrt(252))
-        ms_cvar95 = float(ms_daily_returns[ms_daily_returns <= np.percentile(ms_daily_returns, 5)].mean() * np.sqrt(252)) if len(ms_daily_returns) > 5 else ms_var95
+        ms_v1d, ms_cv1d, ms_var95, ms_cvar95 = self.calculate_var_cvar(ms_daily_returns, alpha=0.05)
 
         max_sharpe_dict = {
             'weights': {tickers[i]: float(max_sharpe_weights[i]) for i in range(num_assets)},
@@ -256,14 +314,24 @@ class QuantAnalystAgent:
             'volatility': float(max_sharpe_vol),
             'sharpe_ratio': float(max_sharpe_sr),
             'var_95': float(ms_var95),
-            'cvar_95': float(ms_cvar95)
+            'cvar_95': float(ms_cvar95),
+            'var_95_1d': float(ms_v1d),
+            'cvar_95_1d': float(ms_cv1d)
         }
+
+        # Min Variance Portfolio VaR & CVaR
+        mv_daily_returns = returns_df.dot(min_var_weights) if not returns_df.empty else pd.Series([0.0])
+        mv_v1d, mv_cv1d, mv_var95, mv_cvar95 = self.calculate_var_cvar(mv_daily_returns, alpha=0.05)
 
         min_var_dict = {
             'weights': {tickers[i]: float(min_var_weights[i]) for i in range(num_assets)},
             'expected_return': float(min_var_ret),
             'volatility': float(min_var_vol),
-            'sharpe_ratio': float(min_var_sr)
+            'sharpe_ratio': float(min_var_sr),
+            'var_95': float(mv_var95),
+            'cvar_95': float(mv_cvar95),
+            'var_95_1d': float(mv_v1d),
+            'cvar_95_1d': float(mv_cv1d)
         }
 
         return {
