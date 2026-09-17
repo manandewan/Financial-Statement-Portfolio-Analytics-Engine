@@ -286,7 +286,7 @@ def render_styled_table(df: pd.DataFrame, wrap_cols=None, badge_cols=None) -> st
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplier, use_ml_views, gemini_key):
+def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplier, use_ml_views, gemini_key, shrink_returns=False):
     """
     Cached helper to execute multi-agent coordinator pipeline.
     """
@@ -298,7 +298,8 @@ def run_agent_pipeline(tickers_tuple, start_str, end_str, rf_rate, ret_multiplie
         risk_free_rate=rf_rate,
         return_multiplier=ret_multiplier,
         use_ml_views=use_ml_views,
-        gemini_api_key=gemini_key
+        gemini_api_key=gemini_key,
+        shrink_returns=shrink_returns
     )
 
 def main():
@@ -347,6 +348,10 @@ def main():
     # ML-Enhanced Return Views Toggle
     use_ml_views = st.sidebar.checkbox("🤖 Use Random Forest ML Views in MPT", value=False,
                                        help="Replaces static historical returns with Supervised ML forward return forecasts inside the Modern Portfolio Theory (MPT) optimizer.")
+
+    # James-Stein Return Regularization Toggle
+    shrink_returns = st.sidebar.checkbox("🛡️ Apply James-Stein Return Regularization", value=False,
+                                        help="Applies Bayes-Stein shrinkage to pull noisy, extreme historical sample returns toward the 10% market equilibrium prior, dampening Michaud error-maximization.")
 
     # Optional Gemini API Key
     st.sidebar.markdown("---")
@@ -404,7 +409,8 @@ def main():
                 rf_rate=rf_rate,
                 ret_multiplier=ret_multiplier,
                 use_ml_views=use_ml_views,
-                gemini_key=gemini_key
+                gemini_key=gemini_key,
+                shrink_returns=shrink_returns
             )
         except Exception as e:
             st.error(f"Error running pipeline: {str(e)}")
@@ -1180,6 +1186,19 @@ def main():
             file_name="portfolio_allocation.json",
             mime="application/json"
         )
+
+        st.markdown("---")
+        st.subheader("🌪️ Institutional Macro Scenario Stress-Testing")
+        st.markdown("Simulates projected peak-to-trough drawdowns for the **Max Sharpe** portfolio under historical systemic market shocks:")
+
+        stress_data = quant_res.get('stress_tests', [])
+        if stress_data:
+            stress_df = pd.DataFrame(stress_data)
+            st.dataframe(
+                stress_df[['Scenario', 'Historical Period', 'Benchmark Shock', 'Simulated Portfolio Loss', 'Context']],
+                use_container_width=True,
+                hide_index=True
+            )
 
     # ----------------------------------------------------
     # TAB 6: GEMINI AI EXECUTIVE REPORT (OPTIONAL)

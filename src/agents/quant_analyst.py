@@ -94,12 +94,107 @@ class QuantAnalystAgent:
         max_dd = float(dd.min())
         return downside_vol, sortino, max_dd
 
+    @staticmethod
+    def apply_return_shrinkage(
+        mean_returns_series: pd.Series, 
+        target_prior: float = 0.10, 
+        shrinkage_weight: float = 0.25
+    ) -> pd.Series:
+        """
+        Bayes-Stein / James-Stein Return Regularization:
+        Shrinks noisy historical sample means toward the long-term equilibrium market prior (10%).
+        Dampens outlier estimation error (Michaud error-maximization) while preserving relative ranking.
+        """
+        shrunk = (1.0 - shrinkage_weight) * mean_returns_series + shrinkage_weight * target_prior
+        return shrunk
+
+    @staticmethod
+    def stress_test_portfolio(
+        weights: Dict[str, float], 
+        asset_metrics: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Simulates portfolio drawdowns under standard institutional historical macro crisis scenarios:
+        1. 2008 Global Financial Crisis (Lehman Shock): Market -50.9%
+        2. 2020 COVID Liquidity Shock (March 2020): Market -33.9%
+        3. 2022 Inflation & Fed Rate-Hike Shock: Market -24.5%, Tech -35.0%, Crypto -65.0%
+        4. 2000 Dot-Com Bubble Collapse: Broad Market -44.7%, Tech -78.0%
+        5. 2011 US Sovereign Debt Downgrade: Market -17.5%
+        """
+        scenarios = [
+            {
+                "name": "2008 Global Financial Crisis",
+                "period": "Sep 2008 – Mar 2009",
+                "mkt_shock": -0.509,
+                "description": "Systemic banking crisis and severe liquidity freeze. S&P 500 collapsed -50.9%."
+            },
+            {
+                "name": "2020 COVID Liquidity Shock",
+                "period": "Feb 2020 – Mar 2020",
+                "mkt_shock": -0.339,
+                "description": "Rapid global lockdown and dash-for-cash panic. S&P 500 plunged -33.9% in 5 weeks."
+            },
+            {
+                "name": "2022 Fed Rate-Hiking Shock",
+                "period": "Jan 2022 – Oct 2022",
+                "mkt_shock": -0.245,
+                "description": "Aggressive monetary tightening to curb inflation. Nasdaq fell -35.0%, crypto collapsed -65%."
+            },
+            {
+                "name": "2000 Dot-Com Bubble Burst",
+                "period": "Mar 2000 – Oct 2002",
+                "mkt_shock": -0.447,
+                "description": "Valuation compression of high-multiple growth equities. Nasdaq collapsed -78%."
+            },
+            {
+                "name": "2011 US Debt Downgrade",
+                "period": "Jul 2011 – Aug 2011",
+                "mkt_shock": -0.175,
+                "description": "S&P downgraded US federal debt credit rating from AAA to AA+, triggering immediate market shock."
+            }
+        ]
+
+        results = []
+        bench_vol = 0.16  # S&P 500 benchmark volatility
+
+        for sc in scenarios:
+            mkt_shock = sc["mkt_shock"]
+            port_loss = 0.0
+
+            for ticker, w in weights.items():
+                if w <= 1e-6:
+                    continue
+                vol = asset_metrics.get(ticker, {}).get('annualized_volatility', bench_vol)
+                beta_proxy = min(max(vol / bench_vol, 0.5), 3.5)
+
+                if "2022" in sc["name"] and vol > 0.35:
+                    asset_shock = mkt_shock * 1.6
+                elif "2000" in sc["name"] and vol > 0.35:
+                    asset_shock = mkt_shock * 1.8
+                else:
+                    asset_shock = mkt_shock * beta_proxy
+
+                asset_shock = max(asset_shock, -0.95)
+                port_loss += w * asset_shock
+
+            results.append({
+                "Scenario": sc["name"],
+                "Historical Period": sc["period"],
+                "Benchmark Shock": f"{sc['mkt_shock']*100:.1f}%",
+                "Simulated Portfolio Loss": f"{port_loss*100:.2f}%",
+                "Loss Numeric": float(port_loss),
+                "Context": sc["description"]
+            })
+
+        return results
+
     def calculate_asset_metrics(
         self, 
         prices_df: pd.DataFrame, 
         return_multiplier: float = 1.0,
         ml_return_forecasts: Dict[str, float] = None,
-        use_ml_views: bool = False
+        use_ml_views: bool = False,
+        shrink_returns: bool = False
     ) -> Dict[str, Any]:
         """
         Calculate individual asset risk & return metrics: CAGR, Volatility, Max Drawdown,
@@ -195,6 +290,8 @@ class QuantAnalystAgent:
 
         corr_matrix = returns_df.corr() if not returns_df.empty else pd.DataFrame(np.eye(len(tickers)), index=tickers, columns=tickers)
         mean_returns_series = pd.Series(mean_returns_dict)
+        if shrink_returns:
+            mean_returns_series = self.apply_return_shrinkage(mean_returns_series)
 
         return {
             'asset_metrics': asset_metrics,
@@ -226,11 +323,12 @@ class QuantAnalystAgent:
         risk_free_rate: float = None,
         return_multiplier: float = 1.0,
         ml_return_forecasts: Dict[str, float] = None,
-        use_ml_views: bool = False
+        use_ml_views: bool = False,
+        shrink_returns: bool = False
     ) -> Dict[str, Any]:
         """
         Compute optimal portfolio allocations, Efficient Frontier, and dynamic parameter adjustments.
-        Supports ML-enhanced Black-Litterman expected return views.
+        Supports ML-enhanced Black-Litterman expected return views and James-Stein return shrinkage.
         """
         if risk_free_rate is not None:
             self.risk_free_rate = risk_free_rate
@@ -246,7 +344,8 @@ class QuantAnalystAgent:
             prices_df, 
             return_multiplier=return_multiplier,
             ml_return_forecasts=ml_return_forecasts,
-            use_ml_views=use_ml_views
+            use_ml_views=use_ml_views,
+            shrink_returns=shrink_returns
         )
         mean_returns = metrics_res['mean_returns'].values
         cov_matrix = metrics_res['cov_matrix'].values
@@ -390,6 +489,9 @@ class QuantAnalystAgent:
             'cvar_95_1d': float(mv_cv1d)
         }
 
+        # Macro Crisis Stress-Testing
+        stress_tests = self.stress_test_portfolio(max_sharpe_dict['weights'], metrics_res['asset_metrics'])
+
         return {
             'tickers': tickers,
             'asset_metrics': metrics_res['asset_metrics'],
@@ -407,6 +509,8 @@ class QuantAnalystAgent:
                 'volatilities': mc_volatilities,
                 'sharpe_ratios': mc_sharpe
             },
+            'stress_tests': stress_tests,
+            'shrink_returns': shrink_returns,
             'correlation_matrix': corr_matrix.to_dict(),
             'shrinkage_intensity': metrics_res.get('shrinkage_intensity', 0.0),
             'risk_free_rate': self.risk_free_rate,

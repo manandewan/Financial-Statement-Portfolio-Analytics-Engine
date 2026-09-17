@@ -344,6 +344,17 @@ class TestSuite20(unittest.TestCase):
         self.assertLessEqual(res['shrinkage_intensity'], 1.0)
         self.assertLessEqual(ms['max_drawdown'], 0.0)
 
+    def test_18c_quant_stress_test_and_shrinkage(self):
+        qa = QuantAnalystAgent()
+        res = qa.optimize_portfolio(self.raw_data, shrink_returns=True)
+        self.assertIn('stress_tests', res)
+        self.assertGreaterEqual(len(res['stress_tests']), 3)
+        for st in res['stress_tests']:
+            self.assertIn('Scenario', st)
+            self.assertIn('Simulated Portfolio Loss', st)
+            self.assertLess(st['Loss Numeric'], 0.0)
+        self.assertTrue(res['shrink_returns'])
+
     # =========================================================================
     # TESTS 19-21: PREDICTIVE MACHINE LEARNING ANALYST
     # =========================================================================
